@@ -1583,11 +1583,18 @@
             text-align: center;
             max-width: 85%; /* Allow a bit more width */
             display: none; /* Managed by JavaScript */
+            opacity: 0; /* Initially hidden for transition */
             pointer-events: none; /* Prevent interference with video/controls */
             box-shadow: 0 2px 10px rgba(0,0,0,0.5); /* Subtle shadow for depth */
             white-space: nowrap; /* Prevent title from wrapping if possible */
             overflow: hidden;
             text-overflow: ellipsis; /* Add ellipsis if title is too long */
+            transition: opacity 0.3s ease-in-out; /* Smooth transition for opacity */
+        }
+
+        #fullscreen-title-overlay.visible {
+            display: block; /* Use a class to control display for transitions */
+            opacity: 1;
         }
         
     </style>
@@ -2571,14 +2578,14 @@
                             titleText = currentContentInfo.title;
                         }
 
-                        console.log('[FullscreenDebug] Enter: currentSeries:', currentSeries, '| currentEpisode:', currentEpisode, '| currentContentInfo:', currentContentInfo); // DEBUG
-                        console.log('[FullscreenDebug] Enter: Constructed Title Text:', titleText); // DEBUG
                         elements.fullscreenTitleOverlay.textContent = titleText;
-                        // Ensure display is block if titleText is not empty, otherwise none.
-                        elements.fullscreenTitleOverlay.style.display = titleText ? 'block' : 'none';
-                        console.log('[FullscreenDebug] Enter: Overlay display style:', elements.fullscreenTitleOverlay.style.display); // DEBUG
-                    } else {
-                        console.error('[FullscreenDebug] Enter: Fullscreen title overlay element not found!'); // DEBUG
+
+                        if (titleText) {
+                            // Initially show title as controls are usually visible on fullscreen entry
+                            elements.fullscreenTitleOverlay.classList.add('visible');
+                        } else {
+                            elements.fullscreenTitleOverlay.classList.remove('visible');
+                        }
                     }
                     updateNavigationButtonsState(); // Ensure nav buttons are correctly displayed
                 });
@@ -2589,9 +2596,33 @@
                     }
                     // Hide title overlay
                     if (elements.fullscreenTitleOverlay) {
-                        elements.fullscreenTitleOverlay.style.display = 'none';
+                        elements.fullscreenTitleOverlay.classList.remove('visible');
                     }
                     updateNavigationButtonsState(); // Ensure nav buttons are correctly displayed
+                });
+
+                playerInstance.on('controlsshown', () => {
+                    if (playerInstance.fullscreen.active && elements.fullscreenTitleOverlay) {
+                        // Re-evaluate title text in case episode changed while controls were hidden
+                        let titleText = '';
+                        if (currentSeries && currentSeries.type === 'series' && currentEpisode && currentEpisode.Title) {
+                            titleText = `${currentSeries.Title} - Episode ${currentEpisode.Episode}: ${currentEpisode.Title}`;
+                        } else if (currentSeries && currentSeries.type === 'series' && currentSeries.Title) {
+                            titleText = currentSeries.Title;
+                        } else if (currentContentInfo && currentContentInfo.title) {
+                            titleText = currentContentInfo.title;
+                        }
+                        elements.fullscreenTitleOverlay.textContent = titleText;
+                        if (titleText) {
+                            elements.fullscreenTitleOverlay.classList.add('visible');
+                        }
+                    }
+                });
+
+                playerInstance.on('controlshidden', () => {
+                    if (playerInstance.fullscreen.active && elements.fullscreenTitleOverlay) {
+                        elements.fullscreenTitleOverlay.classList.remove('visible');
+                    }
                 });
             }
             
@@ -2789,22 +2820,23 @@
                 elements.episodeSelector.value = episode.Episode;
             }
 
-            // Update fullscreen title overlay if it's currently visible
-            if (elements.fullscreenTitleOverlay && elements.fullscreenTitleOverlay.style.display === 'block') {
+            // Update fullscreen title overlay content if a series/episode is playing.
+            // Visibility is handled by controlsshown/hidden events.
+            if (elements.fullscreenTitleOverlay) {
                 let titleText = '';
                 if (currentSeries && currentSeries.type === 'series' && currentEpisode && currentEpisode.Title) {
                     titleText = `${currentSeries.Title} - Episode ${currentEpisode.Episode}: ${currentEpisode.Title}`;
-                } else if (currentContentInfo && currentContentInfo.title) { // Fallback if not a series/episode context
+                } else if (currentContentInfo && currentContentInfo.title) {
+                    // This case might be less relevant here as playEpisode is series-specific,
+                    // but good for safety if currentEpisode details are temporarily missing.
                     titleText = currentContentInfo.title;
                 }
-                console.log('[FullscreenDebug] playEpisode: currentSeries:', currentSeries, '| currentEpisode:', currentEpisode, '| currentContentInfo:', currentContentInfo); // DEBUG
-                console.log('[FullscreenDebug] playEpisode: Constructed Title Text for overlay:', titleText); // DEBUG
                 elements.fullscreenTitleOverlay.textContent = titleText;
-                if (!titleText) {
-                    elements.fullscreenTitleOverlay.style.display = 'none'; // Hide if title becomes empty
-                    console.log('[FullscreenDebug] playEpisode: Overlay hidden due to empty title.'); // DEBUG
-                } else {
-                    console.log('[FullscreenDebug] playEpisode: Overlay text set. Display remains block.'); // DEBUG
+
+                // If the title becomes empty for some reason, ensure it's not 'visible'
+                // although controlsshown would normally re-evaluate and hide it if empty.
+                if (!titleText && elements.fullscreenTitleOverlay.classList.contains('visible')) {
+                    elements.fullscreenTitleOverlay.classList.remove('visible');
                 }
             }
 
