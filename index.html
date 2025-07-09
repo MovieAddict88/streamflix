@@ -1533,7 +1533,7 @@
                                     <button class="action-btn" id="like-btn"><i class="fas fa-thumbs-up"></i> <span id="like-count-span">24K</span></button>
                                     <button class="action-btn" id="dislike-btn"><i class="fas fa-thumbs-down"></i> <span id="dislike-count-span">1K</span></button>
                                     <button class="action-btn" id="share-video-btn"><i class="fas fa-share"></i> <span>Share</span></button>
-                                    <button class="action-btn" id="save-video-btn"><i class="fas fa-save"></i> <span id="save-video-btn-text">Save</span></button>
+                                    <button class="action-btn" id="download-video-btn"><i class="fas fa-download"></i> <span id="download-video-btn-text">Download</span></button>
                                 </div>
                             </div>
                         </div>
@@ -1677,8 +1677,8 @@
             loadMoreBtn: document.getElementById('load-more-btn'),
             loadMoreContainer: document.getElementById('load-more-container'),
             loadingSpinner: document.getElementById('loading-spinner'),
-            saveVideoBtn: document.getElementById('save-video-btn'),
-            saveVideoBtnText: document.getElementById('save-video-btn-text'),
+            downloadVideoBtn: document.getElementById('download-video-btn'),
+            downloadVideoBtnText: document.getElementById('download-video-btn-text'),
             shareVideoBtn: document.getElementById('share-video-btn'),
             likeBtn: document.getElementById('like-btn'),
             dislikeBtn: document.getElementById('dislike-btn'),
@@ -2156,10 +2156,15 @@
                 id: content.Title, // Assuming Title is unique for now
                 title: content.Title,
                 type: content.type,
+                description: content.Description, // Added for download
                 poster: content.Poster || content.Thumbnail,
+                Servers: content.Servers // Added for download
                 // Store other relevant details if needed by other functions
             };
             
+            // Increment and display view count
+            incrementViewCount(content.Title);
+
             // History API interaction for viewer state is now removed.
             // history.pushState({ page: 'viewer', content: currentContentInfo }, 'View Content', '#viewer');
             
@@ -2279,11 +2284,10 @@
             // Scroll to top
             window.scrollTo(0, 0);
 
-            // Setup Save Button
-            updateSaveButtonState(currentContentInfo.id);
+            // Setup Download Button
             // Remove old listener before adding a new one to prevent duplicates
-            elements.saveVideoBtn.removeEventListener('click', handleSaveVideo);
-            elements.saveVideoBtn.addEventListener('click', handleSaveVideo);
+            elements.downloadVideoBtn.removeEventListener('click', handleDownloadVideo);
+            elements.downloadVideoBtn.addEventListener('click', handleDownloadVideo);
 
             // Setup Share Button
             // Remove old listener before adding a new one
@@ -2706,45 +2710,55 @@
         // Initialize the app
         document.addEventListener('DOMContentLoaded', init);
 
-        // --- Save/Bookmark Functionality ---
-        const SAVED_VIDEOS_KEY = 'cineCrazeSavedVideos';
+        // --- Download Functionality ---
+        function handleDownloadVideo() {
+            if (!currentContentInfo || !currentContentInfo.id) {
+                alert("No content selected to download.");
+                return;
+            }
 
-        function getSavedVideos() {
-            return JSON.parse(localStorage.getItem(SAVED_VIDEOS_KEY)) || [];
-        }
+            const { title, type, description } = currentContentInfo;
+            let contentToDownload = `Title: ${title}\nType: ${type}\nDescription: ${description}\n\nSources:\n`;
 
-        function isVideoSaved(contentId) {
-            const savedVideos = getSavedVideos();
-            return savedVideos.some(video => video.id === contentId);
-        }
+            if (type === 'series' && currentSeries && currentSeries.Seasons) {
+                currentSeries.Seasons.forEach(season => {
+                    contentToDownload += `\nSeason ${season.Season}:\n`;
+                    season.Episodes.forEach(episode => {
+                        contentToDownload += `  Episode ${episode.Episode}: ${episode.Title}\n`;
+                        if (episode.Servers) {
+                            episode.Servers.forEach(server => {
+                                contentToDownload += `    - ${server.name}: ${server.url}\n`;
+                            });
+                        }
+                    });
+                });
+            } else if (currentContentInfo.Servers) { // For movies or single videos
+                currentContentInfo.Servers.forEach(server => {
+                    contentToDownload += `  - ${server.name}: ${server.url}\n`;
+                });
+            } else if (currentSeries && currentSeries.Servers) { // Fallback for general content if no specific episode/season structure but has servers
+                 currentSeries.Servers.forEach(server => {
+                    contentToDownload += `  - ${server.name}: ${server.url}\n`;
+                });
+            }
 
-        function updateSaveButtonState(contentId) {
-            if (isVideoSaved(contentId)) {
-                elements.saveVideoBtnText.textContent = 'Saved';
-                elements.saveVideoBtn.classList.add('active'); // Optional: for styling saved state
-            } else {
-                elements.saveVideoBtnText.textContent = 'Save';
-                elements.saveVideoBtn.classList.remove('active');
+
+            const blob = new Blob([contentToDownload], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            // Optionally, give feedback to the user
+            if (elements.downloadVideoBtnText) {
+                 displayTemporaryMessage(elements.downloadVideoBtnText, 'Downloaded!');
             }
         }
-
-        function handleSaveVideo() {
-            if (!currentContentInfo || !currentContentInfo.id) return;
-
-            const { id, title, type, poster } = currentContentInfo;
-            let savedVideos = getSavedVideos();
-
-            if (isVideoSaved(id)) {
-                // Remove video
-                savedVideos = savedVideos.filter(video => video.id !== id);
-            } else {
-                // Add video
-                savedVideos.push({ id, title, type, poster });
-            }
-            localStorage.setItem(SAVED_VIDEOS_KEY, JSON.stringify(savedVideos));
-            updateSaveButtonState(id);
-        }
-        // --- End Save/Bookmark Functionality ---
+        // --- End Download Functionality ---
 
         // --- Share Functionality ---
         function displayTemporaryMessage(element, message) {
@@ -2872,6 +2886,28 @@
             updateLikeDislikeUI(contentId);
         }
         // --- End Like/Dislike Functionality ---
+
+        // --- View Counter Functionality ---
+        const VIEW_COUNTS_KEY = 'cineCrazeViewCounts';
+
+        function getViewCounts() {
+            return JSON.parse(localStorage.getItem(VIEW_COUNTS_KEY)) || {};
+        }
+
+        function incrementViewCount(contentId) {
+            if (!contentId) return;
+            const viewCounts = getViewCounts();
+            viewCounts[contentId] = (viewCounts[contentId] || 0) + 1;
+            localStorage.setItem(VIEW_COUNTS_KEY, JSON.stringify(viewCounts));
+
+            // Update UI
+            const viewsElement = document.getElementById('viewer-views');
+            if (viewsElement) {
+                viewsElement.innerHTML = `<i class="fas fa-eye"></i> ${formatCount(viewCounts[contentId])} views`;
+            }
+        }
+        // --- End View Counter Functionality ---
+
         // Improved mobile search toggle behavior
 const mobileBtn = document.getElementById('mobile-search-btn');
 const searchContainer = document.querySelector('.search-container');
