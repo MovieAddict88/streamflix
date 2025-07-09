@@ -664,7 +664,8 @@
             transition: var(--transition);
         }
 
-        .action-btn:hover {
+        .action-btn:hover,
+        .action-btn.active { /* Added .active state */
             color: var(--youtube-red);
         }
 
@@ -1362,6 +1363,13 @@
   }
 }
 
+@media (max-width: 576px) {
+    .back-button {
+        padding: 12px 20px; /* Increased padding for easier tapping */
+        font-size: 16px;    /* Slightly larger font for visibility */
+    }
+}
+
 
 
         
@@ -1522,10 +1530,10 @@
                                     <span id="viewer-date"><i class="fas fa-calendar"></i> Jan 15, 2023</span>
                                 </div>
                                 <div class="video-actions">
-                                    <button class="action-btn"><i class="fas fa-thumbs-up"></i> <span>24K</span></button>
-                                    <button class="action-btn"><i class="fas fa-thumbs-down"></i> <span>1K</span></button>
-                                    <button class="action-btn"><i class="fas fa-share"></i> <span>Share</span></button>
-                                    <button class="action-btn"><i class="fas fa-save"></i> <span>Save</span></button>
+                                    <button class="action-btn" id="like-btn"><i class="fas fa-thumbs-up"></i> <span id="like-count-span">24K</span></button>
+                                    <button class="action-btn" id="dislike-btn"><i class="fas fa-thumbs-down"></i> <span id="dislike-count-span">1K</span></button>
+                                    <button class="action-btn" id="share-video-btn"><i class="fas fa-share"></i> <span>Share</span></button>
+                                    <button class="action-btn" id="save-video-btn"><i class="fas fa-save"></i> <span id="save-video-btn-text">Save</span></button>
                                 </div>
                             </div>
                         </div>
@@ -1614,6 +1622,9 @@
 
     <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
     <script>
+        if ('scrollRestoration' in history) {
+            history.scrollRestoration = 'manual';
+        }
         // Configuration
         const ITEMS_PER_PAGE = 20;
         const LAZY_LOAD_THRESHOLD = 100; // px from bottom to trigger load
@@ -1665,11 +1676,19 @@
             backButton: document.getElementById('back-button'),
             loadMoreBtn: document.getElementById('load-more-btn'),
             loadMoreContainer: document.getElementById('load-more-container'),
-            loadingSpinner: document.getElementById('loading-spinner')
+            loadingSpinner: document.getElementById('loading-spinner'),
+            saveVideoBtn: document.getElementById('save-video-btn'),
+            saveVideoBtnText: document.getElementById('save-video-btn-text'),
+            shareVideoBtn: document.getElementById('share-video-btn'),
+            likeBtn: document.getElementById('like-btn'),
+            dislikeBtn: document.getElementById('dislike-btn'),
+            likeCountSpan: document.getElementById('like-count-span'),
+            dislikeCountSpan: document.getElementById('dislike-count-span')
         };
         
         // State
         let currentView = 'grid';
+        let currentContentInfo = {}; // To store current viewed content info for save/like
         let currentContent = [];
         let currentCarouselIndex = 0;
         let playerInstance = null;
@@ -1711,7 +1730,7 @@
                 setupEventListeners();
                 updateCarousel();
                 setupLazyLoading();
-                history.replaceState({ page: 'browse' }, 'Browse Content');
+                history.replaceState({ page: 'browse' }, 'Browse Content', window.location.pathname + window.location.search);
             });
         }
         
@@ -2131,9 +2150,18 @@
             if (playerInstance) {
                 playerInstance.stop();
             }
+
+            // Store current content details for save/like/share
+            currentContentInfo = {
+                id: content.Title, // Assuming Title is unique for now
+                title: content.Title,
+                type: content.type,
+                poster: content.Poster || content.Thumbnail,
+                // Store other relevant details if needed by other functions
+            };
             
-            // Use History API
-            history.pushState({ page: 'viewer', content }, '', '');
+            // History API interaction for viewer state is now removed.
+            // history.pushState({ page: 'viewer', content: currentContentInfo }, 'View Content', '#viewer');
             
             // Hide browse sections
             document.querySelector('.carousel').style.display = 'none';
@@ -2250,6 +2278,24 @@
             
             // Scroll to top
             window.scrollTo(0, 0);
+
+            // Setup Save Button
+            updateSaveButtonState(currentContentInfo.id);
+            // Remove old listener before adding a new one to prevent duplicates
+            elements.saveVideoBtn.removeEventListener('click', handleSaveVideo);
+            elements.saveVideoBtn.addEventListener('click', handleSaveVideo);
+
+            // Setup Share Button
+            // Remove old listener before adding a new one
+            elements.shareVideoBtn.removeEventListener('click', handleShareVideo);
+            elements.shareVideoBtn.addEventListener('click', handleShareVideo);
+
+            // Setup Like/Dislike Buttons
+            updateLikeDislikeUI(currentContentInfo.id);
+            elements.likeBtn.removeEventListener('click', handleLike);
+            elements.likeBtn.addEventListener('click', handleLike);
+            elements.dislikeBtn.removeEventListener('click', handleDislike);
+            elements.dislikeBtn.addEventListener('click', handleDislike);
         }
         
         // Play URL with YouTube support
@@ -2357,8 +2403,8 @@
             }
         }
         
-        // Close viewer
-        function closeViewer() {
+        // Close viewer (UI and state update part)
+        function closeViewerInternalLogic() {
             // Show browse sections
             document.querySelector('.carousel').style.display = 'block';
             document.querySelector('.filters-section').style.display = 'block';
@@ -2381,9 +2427,16 @@
             currentEpisode = null;
             currentSeason = null;
             currentSeries = null;
+            currentContentInfo = {}; // Reset content info
             
-            // Use History API to go back
-            history.back();
+            window.scrollTo(0, 0); // Scroll to top when returning to browse
+        }
+
+        // Close viewer (called by back button)
+        function closeViewer() {
+            // This button press now only handles the UI change directly.
+            // Browser history (e.g. physical back button) is handled by popstate.
+            closeViewerInternalLogic();
         }
         
         // Setup event listeners
@@ -2457,7 +2510,44 @@
             });
             
             // Back button in viewer
-            elements.backButton.addEventListener('click', closeViewer);
+            elements.backButton.addEventListener('click', function() {
+                // --- Direct DOM manipulation & cleanup for back button click ---
+                console.log("In-app back button clicked - direct action");
+
+                // Show browse sections
+                const carousel = document.querySelector('.carousel');
+                const filtersSection = document.querySelector('.filters-section');
+                const contentContainer = document.querySelector('.content-container');
+
+                if (carousel) carousel.style.display = 'block';
+                if (filtersSection) filtersSection.style.display = 'block';
+                if (contentContainer) contentContainer.style.display = 'block';
+
+                // Ensure correct display for grid/list view based on currentView
+                if (currentView === 'grid') {
+                    elements.contentGrid.style.display = 'grid';
+                    elements.contentList.style.display = 'none';
+                } else {
+                    elements.contentGrid.style.display = 'none';
+                    elements.contentList.style.display = 'flex';
+                }
+
+                // Hide viewer
+                elements.viewerPage.style.display = 'none';
+
+                if (playerInstance) {
+                    playerInstance.pause();
+                    playerInstance.stop();
+                    // Not clearing source or full state here to keep it simple for this direct action.
+                    // If user uses physical back/fwd, popstate will handle fuller reset/setup.
+                }
+
+                window.scrollTo(0, 0); // Scroll to top
+
+                // NOTE: This action does NOT change history.state or call history.back().
+                // The page is still technically on the "viewer" history state if opened via openViewer().
+                // The phone's physical back button would then trigger popstate to the "browse" state.
+            });
             
             // Episode selector change
             elements.episodeSelector.addEventListener('change', function() {
@@ -2472,9 +2562,30 @@
             
             // History API handling
             window.addEventListener('popstate', function(event) {
-                if (event.state && event.state.page === 'viewer') {
-                    closeViewer();
+                const state = event.state;
+
+                // This event means the user has navigated (e.g., via physical back/forward buttons).
+                // Since we no longer push a '#viewer' state, any 'back' action from the main content view
+                // (where viewer is open as an overlay) will navigate to the previous page in global history
+                // or exit if index.html was the first page.
+
+                // The only state we explicitly set is the initial 'browse' state.
+                // If popstate lands us on a null state (e.g. user went back past our initial replaceState)
+                // or on our 'browse' state, and the viewer is open, it means something is out of sync
+                // or the user somehow navigated back to the page while viewer was conceptually open.
+                // In such cases, ensure the viewer is closed and UI is set to browse.
+                if (!state || (state && state.page === 'browse')) {
+                    if (elements.viewerPage.style.display === 'block') {
+                        console.log("Popstate to browse/null state with viewer open. Closing viewer.");
+                        closeViewerInternalLogic();
+                    }
+                    // If we are on the 'browse' state and there's an unexpected hash, clean it.
+                    // This is mostly a defensive measure.
+                    if (state && state.page === 'browse' && window.location.hash) {
+                        history.replaceState({ page: 'browse' }, 'Browse Content', window.location.pathname + window.location.search);
+                    }
                 }
+                // No explicit handling for 'viewer' state here anymore, as we don't push it.
             });
             
             // Load more button
@@ -2594,7 +2705,173 @@
         
         // Initialize the app
         document.addEventListener('DOMContentLoaded', init);
+
+        // --- Save/Bookmark Functionality ---
+        const SAVED_VIDEOS_KEY = 'cineCrazeSavedVideos';
+
+        function getSavedVideos() {
+            return JSON.parse(localStorage.getItem(SAVED_VIDEOS_KEY)) || [];
+        }
+
+        function isVideoSaved(contentId) {
+            const savedVideos = getSavedVideos();
+            return savedVideos.some(video => video.id === contentId);
+        }
+
+        function updateSaveButtonState(contentId) {
+            if (isVideoSaved(contentId)) {
+                elements.saveVideoBtnText.textContent = 'Saved';
+                elements.saveVideoBtn.classList.add('active'); // Optional: for styling saved state
+            } else {
+                elements.saveVideoBtnText.textContent = 'Save';
+                elements.saveVideoBtn.classList.remove('active');
+            }
+        }
+
+        function handleSaveVideo() {
+            if (!currentContentInfo || !currentContentInfo.id) return;
+
+            const { id, title, type, poster } = currentContentInfo;
+            let savedVideos = getSavedVideos();
+
+            if (isVideoSaved(id)) {
+                // Remove video
+                savedVideos = savedVideos.filter(video => video.id !== id);
+            } else {
+                // Add video
+                savedVideos.push({ id, title, type, poster });
+            }
+            localStorage.setItem(SAVED_VIDEOS_KEY, JSON.stringify(savedVideos));
+            updateSaveButtonState(id);
+        }
+        // --- End Save/Bookmark Functionality ---
+
+        // --- Share Functionality ---
+        function displayTemporaryMessage(element, message) {
+            const originalText = element.textContent;
+            element.textContent = message;
+            setTimeout(() => {
+                element.textContent = originalText;
+            }, 2000); // Display message for 2 seconds
+        }
+
+        async function handleShareVideo() {
+            if (!currentContentInfo || !currentContentInfo.title) {
+                console.warn("No content info to share.");
+                return;
+            }
+
+            const shareData = {
+                title: `Check out: ${currentContentInfo.title}`,
+                text: `Watch "${currentContentInfo.title}" on CineCraze!`,
+                url: window.location.href
+            };
+
+            if (navigator.share) {
+                try {
+                    await navigator.share(shareData);
+                    console.log('Content shared successfully');
+                } catch (err) {
+                    console.error('Error sharing content:', err);
+                    if (err.name !== 'AbortError') {
+                        navigator.clipboard.writeText(shareData.url).then(() => {
+                            displayTemporaryMessage(elements.shareVideoBtn.querySelector('span'), 'Link Copied!');
+                        }).catch(clipErr => {
+                            console.error('Fallback clipboard error:', clipErr);
+                            alert('Failed to copy link.');
+                        });
+                    }
+                }
+            } else {
+                try {
+                    await navigator.clipboard.writeText(shareData.url);
+                    displayTemporaryMessage(elements.shareVideoBtn.querySelector('span'), 'Link Copied!');
+                } catch (err) {
+                    console.error('Could not copy text: ', err);
+                    alert('Failed to copy link. Please copy it manually: ' + shareData.url);
+                }
+            }
+        }
+        // --- End Share Functionality ---
+
+        // --- Like/Dislike Functionality ---
+        const INTERACTIONS_KEY = 'cineCrazeInteractions';
+
+        function getVideoInteractions(contentId) {
+            const allInteractions = JSON.parse(localStorage.getItem(INTERACTIONS_KEY)) || {};
+            // Ensure likes and dislikes are numbers, default to 0 if not present or invalid
+            const likes = parseInt(allInteractions[contentId]?.likes, 10);
+            const dislikes = parseInt(allInteractions[contentId]?.dislikes, 10);
+            return {
+                likes: isNaN(likes) ? 0 : likes,
+                dislikes: isNaN(dislikes) ? 0 : dislikes,
+                userAction: allInteractions[contentId]?.userAction || null
+            };
+        }
+
+        function saveVideoInteractions(contentId, interactionData) {
+            const allInteractions = JSON.parse(localStorage.getItem(INTERACTIONS_KEY)) || {};
+            allInteractions[contentId] = interactionData;
+            localStorage.setItem(INTERACTIONS_KEY, JSON.stringify(allInteractions));
+        }
+
+        function formatCount(count) {
+            if (count >= 1000000) return (count / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+            if (count >= 1000) return (count / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+            return count.toString();
+        }
         
+        function updateLikeDislikeUI(contentId) {
+            if (!elements.likeBtn || !elements.dislikeBtn) return; // Ensure elements are present
+
+            const interactions = getVideoInteractions(contentId); // Get fresh data
+            elements.likeCountSpan.textContent = formatCount(interactions.likes);
+            elements.dislikeCountSpan.textContent = formatCount(interactions.dislikes);
+
+            elements.likeBtn.classList.remove('active');
+            elements.dislikeBtn.classList.remove('active');
+
+            if (interactions.userAction === 'liked') {
+                elements.likeBtn.classList.add('active');
+            } else if (interactions.userAction === 'disliked') {
+                elements.dislikeBtn.classList.add('active');
+            }
+        }
+
+        function handleLike() {
+            if (!currentContentInfo || !currentContentInfo.id) return;
+            const contentId = currentContentInfo.id;
+            let interactions = getVideoInteractions(contentId);
+
+            if (interactions.userAction === 'liked') {
+                interactions.likes--;
+                interactions.userAction = null;
+            } else {
+                if (interactions.userAction === 'disliked') interactions.dislikes--;
+                interactions.likes++;
+                interactions.userAction = 'liked';
+            }
+            saveVideoInteractions(contentId, interactions);
+            updateLikeDislikeUI(contentId);
+        }
+
+        function handleDislike() {
+            if (!currentContentInfo || !currentContentInfo.id) return;
+            const contentId = currentContentInfo.id;
+            let interactions = getVideoInteractions(contentId);
+
+            if (interactions.userAction === 'disliked') {
+                interactions.dislikes--;
+                interactions.userAction = null;
+            } else {
+                if (interactions.userAction === 'liked') interactions.likes--;
+                interactions.dislikes++;
+                interactions.userAction = 'disliked';
+            }
+            saveVideoInteractions(contentId, interactions);
+            updateLikeDislikeUI(contentId);
+        }
+        // --- End Like/Dislike Functionality ---
         // Improved mobile search toggle behavior
 const mobileBtn = document.getElementById('mobile-search-btn');
 const searchContainer = document.querySelector('.search-container');
