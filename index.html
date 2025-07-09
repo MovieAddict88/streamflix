@@ -432,16 +432,39 @@
         }
 
         .content-card.grid .card-img {
-            height: 85%;
+            /* height: 85%; REMOVED to use aspect-ratio */
+            width: 100%;
+            aspect-ratio: 2 / 3; /* Common poster aspect ratio */
+            background-color: var(--youtube-dark-gray); /* Fallback background */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative; /* For icon overlay */
+            overflow: hidden; /* Ensure child img doesn't break bounds */
         }
 
         .card-img img {
             width: 100%;
             height: 100%;
             object-fit: cover;
-            transition: var(--transition);
+            /* transition: var(--transition); NO, use specific opacity transition */
             opacity: 0; /* Start with opacity 0 for lazy loading */
             transition: opacity 0.3s ease;
+        }
+
+        .card-img.broken-image::before {
+            content: "\\f128"; /* FontAwesome question icon */
+            font-family: "Font Awesome 6 Free";
+            font-weight: 900; /* For solid icons */
+            font-size: 48px;
+            color: var(--youtube-light-gray);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        .card-img.broken-image img {
+            display: none; /* Hide the actual broken image element */
         }
 
         .card-img img.loaded {
@@ -478,11 +501,11 @@
 
 .content-card.grid .card-info {
   padding: 10px;
-  min-height: 80px;
+  min-height: 80px; /* Keep this to ensure overall card structure */
   background-color: var(--youtube-dark-gray);
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: space-between; /* Push title to top, meta to bottom */
 }
 
 
@@ -498,12 +521,13 @@
   color: var(--light);
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2; /* default 2 lines */
+  -webkit-line-clamp: 2;
   overflow: hidden;
   text-overflow: ellipsis;
   word-break: break-word;
   font-size: 16px;
-  height: 2.8em;
+  /* height: 2.8em; /* Removed fixed height, relying on line-clamp and flex properties */
+  /* max-height: 2.8em; /* Consider if line-clamp is not enough */
 }
 
 
@@ -511,9 +535,11 @@
 
 .card-meta {
     display: flex;
-    gap: 10px;
-    font-size: 14px;
+    flex-wrap: wrap; /* Allow meta items to wrap if too many */
+    gap: 8px 10px; /* row-gap column-gap */
+    font-size: 13px; /* Slightly smaller to save space */
     color: var(--youtube-light-gray);
+    margin-top: 6px; /* Add some space above the metadata */
 }
 
 
@@ -1567,6 +1593,13 @@
             transform: translateY(-2px); /* Subtle hover effect */
             color: white !important;
         }
+
+        /* Hide header on mobile when video is fullscreen */
+        @media (max-width: 768px) {
+            html.plyr--fullscreen-active header {
+                display: none !important;
+            }
+        }
         
     </style>
 </head>
@@ -2366,6 +2399,13 @@
                     if (rect.top < window.innerHeight + LAZY_LOAD_THRESHOLD) {
                         img.src = img.dataset.src;
                         img.onload = () => {
+                            img.classList.add('loaded');
+                        };
+                        img.onerror = function() {
+                            if (img.parentNode && img.parentNode.classList.contains('card-img')) {
+                                img.parentNode.classList.add('broken-image');
+                            }
+                            // Mark as 'loaded' to remove opacity:0 and prevent further processing
                             img.classList.add('loaded');
                         };
                     }
