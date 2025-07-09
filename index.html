@@ -2558,13 +2558,27 @@
                     // Show title overlay
                     if (elements.fullscreenTitleOverlay) {
                         let titleText = '';
-                        if (currentSeries && currentEpisode) {
+                        // Prioritize series episode title if available
+                        if (currentSeries && currentSeries.type === 'series' && currentEpisode && currentEpisode.Title) {
                             titleText = `${currentSeries.Title} - Episode ${currentEpisode.Episode}: ${currentEpisode.Title}`;
-                        } else if (currentContentInfo && currentContentInfo.title) {
+                        }
+                        // Then check if it's a series title (e.g., if somehow an episode isn't active yet but it is a series)
+                        else if (currentSeries && currentSeries.type === 'series' && currentSeries.Title) {
+                            titleText = currentSeries.Title; // Show series title if no specific episode
+                        }
+                        // Fallback to the general content title from currentContentInfo (should cover movies, live TV, or series title if above failed)
+                        else if (currentContentInfo && currentContentInfo.title) {
                             titleText = currentContentInfo.title;
                         }
+
+                        console.log('[FullscreenDebug] Enter: currentSeries:', currentSeries, '| currentEpisode:', currentEpisode, '| currentContentInfo:', currentContentInfo); // DEBUG
+                        console.log('[FullscreenDebug] Enter: Constructed Title Text:', titleText); // DEBUG
                         elements.fullscreenTitleOverlay.textContent = titleText;
-                        elements.fullscreenTitleOverlay.style.display = 'block';
+                        // Ensure display is block if titleText is not empty, otherwise none.
+                        elements.fullscreenTitleOverlay.style.display = titleText ? 'block' : 'none';
+                        console.log('[FullscreenDebug] Enter: Overlay display style:', elements.fullscreenTitleOverlay.style.display); // DEBUG
+                    } else {
+                        console.error('[FullscreenDebug] Enter: Fullscreen title overlay element not found!'); // DEBUG
                     }
                     updateNavigationButtonsState(); // Ensure nav buttons are correctly displayed
                 });
@@ -2777,7 +2791,21 @@
 
             // Update fullscreen title overlay if it's currently visible
             if (elements.fullscreenTitleOverlay && elements.fullscreenTitleOverlay.style.display === 'block') {
-                elements.fullscreenTitleOverlay.textContent = `${currentSeries.Title} - Episode ${episode.Episode}: ${episode.Title}`;
+                let titleText = '';
+                if (currentSeries && currentSeries.type === 'series' && currentEpisode && currentEpisode.Title) {
+                    titleText = `${currentSeries.Title} - Episode ${currentEpisode.Episode}: ${currentEpisode.Title}`;
+                } else if (currentContentInfo && currentContentInfo.title) { // Fallback if not a series/episode context
+                    titleText = currentContentInfo.title;
+                }
+                console.log('[FullscreenDebug] playEpisode: currentSeries:', currentSeries, '| currentEpisode:', currentEpisode, '| currentContentInfo:', currentContentInfo); // DEBUG
+                console.log('[FullscreenDebug] playEpisode: Constructed Title Text for overlay:', titleText); // DEBUG
+                elements.fullscreenTitleOverlay.textContent = titleText;
+                if (!titleText) {
+                    elements.fullscreenTitleOverlay.style.display = 'none'; // Hide if title becomes empty
+                    console.log('[FullscreenDebug] playEpisode: Overlay hidden due to empty title.'); // DEBUG
+                } else {
+                    console.log('[FullscreenDebug] playEpisode: Overlay text set. Display remains block.'); // DEBUG
+                }
             }
 
             updateNavigationButtonsState(); // Update buttons after episode changes
