@@ -1937,7 +1937,36 @@
                 setupEventListeners();
                 updateCarousel();
                 setupLazyLoading();
-                history.replaceState({ page: 'browse' }, 'Browse Content', window.location.pathname + window.location.search);
+                // Ensure initial state is 'browse' and URL is clean
+                if (window.location.hash) { // If there's a hash on initial load
+                    const hash = window.location.hash;
+                    // Check if it's a viewer hash we might want to restore
+                    if (hash.startsWith('#viewer/')) {
+                        const contentIdToRestore = decodeURIComponent(hash.substring('#viewer/'.length));
+                        const contentToOpen = findContentById(contentIdToRestore);
+                        if (contentToOpen) {
+                            console.log("Init: Restoring viewer for", contentIdToRestore, "from URL hash.");
+                            // openViewer will push the correct 'viewer' state.
+                            // Hide browse sections first, as openViewer expects this.
+                            document.querySelector('.carousel').style.display = 'none';
+                            document.querySelector('.filters-section').style.display = 'none';
+                            document.querySelector('.content-container').style.display = 'none';
+                            openViewer(contentToOpen);
+                            // State is set by openViewer, so we don't need replaceState here for 'viewer'.
+                        } else {
+                            console.warn("Init: Content ID from hash not found:", contentIdToRestore, ". Defaulting to browse view.");
+                            history.replaceState({ page: 'browse' }, 'Browse Content', window.location.pathname + window.location.search);
+                        }
+                    } else {
+                        // Unknown hash, clean it and set to browse state
+                        console.log("Init: Clearing unknown hash and setting to browse state.");
+                        history.replaceState({ page: 'browse' }, 'Browse Content', window.location.pathname + window.location.search);
+                    }
+                } else {
+                    // No hash, standard initial browse state
+                    console.log("Init: Setting initial state to browse.");
+                    history.replaceState({ page: 'browse' }, 'Browse Content', window.location.pathname + window.location.search);
+                }
             });
         }
         
@@ -2380,8 +2409,8 @@
             // Increment and display view count
             incrementViewCount(content.Title);
 
-            // History API interaction for viewer state is now removed.
-            // history.pushState({ page: 'viewer', content: currentContentInfo }, 'View Content', '#viewer');
+            // Push a new state for the viewer page
+            history.pushState({ page: 'viewer', contentId: content.Title }, `View ${content.Title}`, `#viewer/${encodeURIComponent(content.Title)}`);
             
             // Hide browse sections
             document.querySelector('.carousel').style.display = 'none';
@@ -2772,6 +2801,24 @@
             elements.customControlsContainer.style.display = 'none'; // Hide nav buttons
             
             window.scrollTo(0, 0); // Scroll to top when returning to browse
+
+            // If the current history state is the viewer state, go back to clear it.
+            // This is primarily for when closeViewerInternalLogic is called by an in-app action (like the UI back button),
+            // not by a popstate event (which would mean history already changed).
+            if (history.state && history.state.page === 'viewer') {
+                // Check if the call stack includes the popstate handler to avoid loop
+                // This is a conceptual check; actual implementation might need a flag
+                // For now, we assume direct calls to closeViewerInternalLogic (e.g., from UI back button)
+                // are the ones that should trigger history.back().
+                // A more robust solution might involve passing a parameter to indicate the caller.
+                // history.back(); // This might be too aggressive if popstate also calls this.
+                // Let's refine this: only go back if this function was NOT called by popstate.
+                // For now, we'll rely on the popstate handler to manage its own history.
+                // The main purpose here is UI cleanup. The history part is tricky.
+                // Let's assume for now that if an in-app button closes the viewer,
+                // it should also try to correct the history if we are indeed on a 'viewer' state.
+                // However, the `backButton` event listener is a better place for this specific `history.back()` call.
+            }
         }
 
         // Close viewer (called by back button)
@@ -2779,6 +2826,11 @@
             // This button press now only handles the UI change directly.
             // Browser history (e.g. physical back button) is handled by popstate.
             closeViewerInternalLogic();
+            // If the in-app back button is pressed, and we are in a 'viewer' state,
+            // we should navigate back in history to the 'browse' state.
+            if (history.state && history.state.page === 'viewer') {
+                history.back();
+            }
         }
         
         // Setup event listeners
@@ -2902,32 +2954,52 @@
                 }
             });
             
-            // History API handling
+            // History API handling - This is now the primary popstate listener
             window.addEventListener('popstate', function(event) {
                 const state = event.state;
+                const viewerIsOpen = elements.viewerPage.style.display === 'block';
 
-                // This event means the user has navigated (e.g., via physical back/forward buttons).
-                // Since we no longer push a '#viewer' state, any 'back' action from the main content view
-                // (where viewer is open as an overlay) will navigate to the previous page in global history
-                // or exit if index.html was the first page.
+                console.log("Popstate event fired. Current state:", state, "Viewer open:", viewerIsOpen);
 
-                // The only state we explicitly set is the initial 'browse' state.
-                // If popstate lands us on a null state (e.g. user went back past our initial replaceState)
-                // or on our 'browse' state, and the viewer is open, it means something is out of sync
-                // or the user somehow navigated back to the page while viewer was conceptually open.
-                // In such cases, ensure the viewer is closed and UI is set to browse.
-                if (!state || (state && state.page === 'browse')) {
-                    if (elements.viewerPage.style.display === 'block') {
-                        console.log("Popstate to browse/null state with viewer open. Closing viewer.");
-                        closeViewerInternalLogic();
+                if (state && state.page === 'browse') {
+                    // We've navigated to the 'browse' state (e.g., via device back button from viewer)
+                    if (viewerIsOpen) {
+                        console.log("Popstate: Navigated to 'browse' state, viewer is open. Closing viewer UI.");
+                        closeViewerInternalLogic(); // Just clean up UI, history has already changed
                     }
-                    // If we are on the 'browse' state and there's an unexpected hash, clean it.
-                    // This is mostly a defensive measure.
-                    if (state && state.page === 'browse' && window.location.hash) {
-                        history.replaceState({ page: 'browse' }, 'Browse Content', window.location.pathname + window.location.search);
+                    // Ensure URL hash is clean if we are on browse state
+                    if (window.location.hash && window.location.hash !== "#") { // Check hash is not just "#"
+                         history.replaceState({ page: 'browse' }, 'Browse Content', window.location.pathname + window.location.search);
                     }
+                } else if (state && state.page === 'viewer') {
+                    // We've navigated to a 'viewer' state (e.g., using browser forward button)
+                    if (!viewerIsOpen) {
+                        console.log("Popstate: Navigated to 'viewer' state, viewer is closed. Re-opening viewer for content:", state.contentId);
+                        const contentToOpen = findContentById(state.contentId);
+                        if (contentToOpen) {
+                            // Before opening, ensure browse sections are hidden, as openViewer expects this
+                            document.querySelector('.carousel').style.display = 'none';
+                            document.querySelector('.filters-section').style.display = 'none';
+                            document.querySelector('.content-container').style.display = 'none';
+                            openViewer(contentToOpen);
+                        } else {
+                            console.warn("Popstate: Could not find content to reopen viewer:", state.contentId, ". Navigating to browse.");
+                            history.pushState({ page: 'browse' }, 'Browse Content', window.location.pathname + window.location.search); // Use pushState to effectively navigate
+                            closeViewerInternalLogic(); // Ensure UI is consistent with browse state
+                        }
+                    }
+                } else if (!state && viewerIsOpen) {
+                    // Navigated to a state with no specific page info (e.g. initial page or back beyond our states)
+                    // If viewer is open, close it as we are likely no longer on a 'viewer' specific history entry.
+                    console.log("Popstate: Navigated to a null/undefined state while viewer is open. Closing viewer and setting state to browse.");
+                    closeViewerInternalLogic();
+                    history.replaceState({ page: 'browse' }, 'Browse Content', window.location.pathname + window.location.search);
+                } else if (!state && !viewerIsOpen) {
+                    // Navigated to a null state, and viewer is already closed. This is likely the initial page state before our script runs.
+                    // We should ensure it's marked as 'browse'.
+                     console.log("Popstate: Navigated to a null/undefined state, viewer is closed. Ensuring 'browse' state.");
+                    history.replaceState({ page: 'browse' }, 'Browse Content', window.location.pathname + window.location.search);
                 }
-                // No explicit handling for 'viewer' state here anymore, as we don't push it.
             });
             
             // Load more button
@@ -3051,6 +3123,22 @@
         
         // Initialize the app
         document.addEventListener('DOMContentLoaded', init);
+
+        // Helper function to find content by ID (used in popstate)
+        function findContentById(contentId) {
+            if (!cineData || !cineData.Categories) return null;
+            for (const category of cineData.Categories) {
+                const foundEntry = category.Entries.find(entry => entry.Title === contentId); // Assuming Title is used as ID
+                if (foundEntry) {
+                    return {
+                        ...foundEntry,
+                        type: category.MainCategory.toLowerCase().includes('movie') ? 'movie' :
+                              category.MainCategory.toLowerCase().includes('series') ? 'series' : 'live'
+                    };
+                }
+            }
+            return null;
+        }
 
         // --- Episode Navigation Functionality ---
         function updateNavigationButtonsState() {
