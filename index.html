@@ -1373,6 +1373,81 @@
 
 
         
+        /* Download Options Modal Styles */
+        #downloadOptionsModal .modal-content {
+            background-color: var(--youtube-dark-gray); /* Using a variable from the existing theme */
+            color: var(--light);
+            padding: 25px;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            width: 90%;
+            max-width: 550px; /* Slightly wider for better link display */
+            position: relative; /* For absolute positioning of close button */
+            text-align: left; /* Align text to the left for list items */
+        }
+
+        #downloadOptionsModal .modal-header {
+            display: flex;
+            justify-content: space-between; /* Pushes title and close button apart */
+            align-items: center;
+            border-bottom: 1px solid var(--youtube-gray);
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+
+        #downloadModalTitle {
+            font-size: 22px; /* Slightly larger title */
+            font-weight: 600;
+            margin: 0; /* Remove default margin */
+            color: var(--light); /* Ensure title color matches theme */
+        }
+
+        #closeDownloadModalBtn {
+            background: none;
+            border: none;
+            color: var(--youtube-light-gray);
+            font-size: 30px; /* Larger close button */
+            cursor: pointer;
+            padding: 0 5px; /* Add some padding for easier clicking */
+            line-height: 1; /* Ensure it aligns well */
+            position: absolute; /* Position relative to modal-content */
+            top: 10px;
+            right: 15px;
+        }
+        #closeDownloadModalBtn:hover {
+            color: var(--youtube-red);
+        }
+
+        #downloadModalBody ul {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+            max-height: 350px; /* Increased max height */
+            overflow-y: auto;
+        }
+
+        #downloadModalBody li {
+            margin-bottom: 12px; /* Spacing between links */
+        }
+
+        #downloadModalBody li a { /* Target the anchor within the list item */
+            display: block; /* Make links take full width */
+            padding: 12px 18px; /* Increased padding */
+            background-color: var(--youtube-red);
+            color: white !important; /* Ensure text is white */
+            text-decoration: none !important; /* Ensure no underline */
+            border-radius: var(--radius);
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            font-size: 16px; /* Clearer font size */
+            text-align: center; /* Center text in button */
+            border: none; /* Remove any default anchor border */
+        }
+
+        #downloadModalBody li a:hover { /* Hover state for the anchor */
+            background-color: var(--primary-dark); /* Using a theme variable */
+            transform: translateY(-2px); /* Subtle hover effect */
+            color: white !important;
+        }
         
     </style>
 </head>
@@ -2717,45 +2792,164 @@
                 return;
             }
 
-            const { title, type, description } = currentContentInfo;
-            let contentToDownload = `Title: ${title}\nType: ${type}\nDescription: ${description}\n\nSources:\n`;
+            const { title, type } = currentContentInfo;
 
-            if (type === 'series' && currentSeries && currentSeries.Seasons) {
-                currentSeries.Seasons.forEach(season => {
-                    contentToDownload += `\nSeason ${season.Season}:\n`;
-                    season.Episodes.forEach(episode => {
-                        contentToDownload += `  Episode ${episode.Episode}: ${episode.Title}\n`;
-                        if (episode.Servers) {
-                            episode.Servers.forEach(server => {
-                                contentToDownload += `    - ${server.name}: ${server.url}\n`;
-                            });
-                        }
-                    });
+            if (type === 'movie') {
+                if (currentContentInfo.Servers && currentContentInfo.Servers.length === 1) {
+                    // Single server, direct download
+                    const server = currentContentInfo.Servers[0];
+                    const a = document.createElement('a');
+                    a.href = server.url;
+                    // Try to infer filename from URL or use title
+                    let filename = server.url.substring(server.url.lastIndexOf('/') + 1);
+                    if (!filename || !filename.includes('.')) { // Basic check if it's a real filename
+                        const extension = server.url.includes('.mp4') ? '.mp4' : server.url.includes('.mkv') ? '.mkv' : '.mp4'; // Default to mp4
+                        filename = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}${extension}`;
+                    }
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    if (elements.downloadVideoBtnText) {
+                        displayTemporaryMessage(elements.downloadVideoBtnText, 'Downloading...');
+                    }
+                } else if (currentContentInfo.Servers && currentContentInfo.Servers.length > 1) {
+                    // Multiple servers, prompt user (modal implementation would go here)
+                    // For now, let's alert and list options in console, or download the first one as a fallback
+                    alert("Multiple download options available. Please choose a server. (UI for selection to be implemented)");
+                    console.log("Available servers for " + title + ":");
+                    currentContentInfo.Servers.forEach(server => console.log(`${server.name}: ${server.url}`));
+                    // Fallback: download the first one for now
+                    // const server = currentContentInfo.Servers[0];
+                    // const a = document.createElement('a');
+                    // a.href = server.url;
+                    // let filename = server.url.substring(server.url.lastIndexOf('/') + 1);
+                    // if (!filename || !filename.includes('.')) {
+                    //     const extension = server.url.includes('.mp4') ? '.mp4' : server.url.includes('.mkv') ? '.mkv' : '.mp4';
+                    //     filename = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}${extension}`;
+                    // }
+                    // a.download = filename;
+                    // document.body.appendChild(a);
+                    // a.click();
+                    // document.body.removeChild(a);
+                    // if (elements.downloadVideoBtnText) {
+                    //     displayTemporaryMessage(elements.downloadVideoBtnText, 'Downloading (first option)...');
+                    // }
+                    // Placeholder for modal:
+                    showDownloadOptionsModal(currentContentInfo.Servers, title);
+
+                } else {
+                    alert("No download servers available for this movie.");
+                }
+            } else if (type === 'series') {
+                if (!currentEpisode || !currentEpisode.Servers || currentEpisode.Servers.length === 0) {
+                    alert("Please select an episode with available download links first.");
+                    if (elements.downloadVideoBtnText) {
+                        displayTemporaryMessage(elements.downloadVideoBtnText, 'Select Episode');
+                    }
+                    return;
+                }
+
+                const episodeTitle = `${title} - Episode ${currentEpisode.Episode}`;
+                const servers = currentEpisode.Servers;
+
+                if (servers.length === 1) {
+                    // Single server for the episode, direct download
+                    const server = servers[0];
+                    const a = document.createElement('a');
+                    a.href = server.url;
+                    let filename = server.url.substring(server.url.lastIndexOf('/') + 1);
+                    if (!filename || !filename.includes('.')) {
+                        const extension = server.url.includes('.mp4') ? '.mp4' : server.url.includes('.mkv') ? '.mkv' : '.mp4';
+                        filename = `${episodeTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase()}${extension}`;
+                    }
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    if (elements.downloadVideoBtnText) {
+                        displayTemporaryMessage(elements.downloadVideoBtnText, 'Downloading Episode...');
+                    }
+                } else if (servers.length > 1) {
+                    // Multiple servers for the episode, show modal
+                    showDownloadOptionsModal(servers, episodeTitle);
+                }
+                // No specific 'else' needed here as the initial check covers no servers.
+            } else {
+                alert(`Download not supported for content type: ${type}`);
+            }
+        }
+
+        function showDownloadOptionsModal(servers, contentTitle) {
+            // Check if modal structure exists, if not, create it dynamically or log error
+            const modal = document.getElementById('downloadOptionsModal');
+            const modalTitle = document.getElementById('downloadModalTitle');
+            const modalBody = document.getElementById('downloadModalBody');
+            const closeModalBtn = document.getElementById('closeDownloadModalBtn');
+
+            if (!modal || !modalTitle || !modalBody || !closeModalBtn) {
+                console.error("Download options modal elements not found. Please ensure they are in the HTML.");
+                // Fallback to alert if modal is not available
+                let serverList = "Available Servers:\n";
+                servers.forEach(server => {
+                    serverList += `${server.name} - ${server.url}\n`;
                 });
-            } else if (currentContentInfo.Servers) { // For movies or single videos
-                currentContentInfo.Servers.forEach(server => {
-                    contentToDownload += `  - ${server.name}: ${server.url}\n`;
-                });
-            } else if (currentSeries && currentSeries.Servers) { // Fallback for general content if no specific episode/season structure but has servers
-                 currentSeries.Servers.forEach(server => {
-                    contentToDownload += `  - ${server.name}: ${server.url}\n`;
-                });
+                alert(`Multiple download options for ${contentTitle}:\n${serverList}\n(Modal UI is preferred)`);
+                return;
             }
 
+            modalTitle.textContent = `Download Options for "${contentTitle}"`;
+            modalBody.innerHTML = ''; // Clear previous options
 
-            const blob = new Blob([contentToDownload], { type: 'text/plain;charset=utf-8' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.txt`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            const list = document.createElement('ul');
+            list.style.listStyleType = 'none';
+            list.style.padding = '0';
 
-            // Optionally, give feedback to the user
-            if (elements.downloadVideoBtnText) {
-                 displayTemporaryMessage(elements.downloadVideoBtnText, 'Downloaded!');
+            servers.forEach(server => {
+                const listItem = document.createElement('li');
+                listItem.style.marginBottom = '10px';
+
+                const link = document.createElement('a');
+                link.href = server.url;
+                link.textContent = `Download ${server.name} (${server.quality || 'Unknown quality'})`; // Assuming server object might have a quality property
+                link.style.display = 'inline-block';
+                link.style.padding = '10px 15px';
+                link.style.backgroundColor = 'var(--youtube-red)';
+                link.style.color = 'white';
+                link.style.textDecoration = 'none';
+                link.style.borderRadius = '5px';
+                link.style.marginRight = '10px';
+
+                // Try to infer filename from URL or use title
+                let filename = server.url.substring(server.url.lastIndexOf('/') + 1);
+                 if (!filename || !filename.includes('.') || filename.length > 50) { // Basic check for valid filename
+                    const extension = server.url.includes('.mp4') ? '.mp4' : server.url.includes('.mkv') ? '.mkv' : '.avi' ? '.avi' : '.mp4'; // Default to mp4
+                    filename = `${contentTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${server.name.replace(/[^a-z0-9]/gi, '_')}${extension}`;
+                }
+                link.download = filename;
+
+                link.addEventListener('click', () => {
+                    if (elements.downloadVideoBtnText) {
+                        displayTemporaryMessage(elements.downloadVideoBtnText, `Downloading ${server.name}...`);
+                    }
+                    modal.style.display = 'none'; // Hide modal after click
+                });
+
+                listItem.appendChild(link);
+                list.appendChild(listItem);
+            });
+
+            modalBody.appendChild(list);
+            modal.style.display = 'flex'; // Show the modal
+
+            closeModalBtn.onclick = function() {
+                modal.style.display = 'none';
+            }
+            // Close modal if user clicks outside of it
+            window.onclick = function(event) {
+                if (event.target == modal) {
+                    modal.style.display = 'none';
+                }
             }
         }
         // --- End Download Functionality ---
@@ -2944,5 +3138,18 @@ window.addEventListener('load', fixSearchVisibilityOnResize);
 
         
     </script>
+
+    <!-- Download Options Modal -->
+    <div id="downloadOptionsModal" class="modal" style="display: none; justify-content: center; align-items: center;">
+        <div class="modal-content" style="width: auto; max-width: 500px; background-color: var(--youtube-dark-gray); padding: 20px; border-radius: var(--radius); text-align: center;">
+            <div class="modal-header" style="border-bottom: 1px solid var(--youtube-gray); padding-bottom: 10px; margin-bottom: 15px;">
+                <h3 id="downloadModalTitle" style="color: var(--light); font-size: 20px;">Download Options</h3>
+                <button id="closeDownloadModalBtn" class="close-modal" style="font-size: 28px; background: none; border: none; color: var(--light); cursor: pointer; position: absolute; top: 15px; right: 20px;">&times;</button>
+            </div>
+            <div id="downloadModalBody" style="max-height: 300px; overflow-y: auto;">
+                <!-- Download links will be populated here by JavaScript -->
+            </div>
+        </div>
+    </div>
 </body>
 </html>
