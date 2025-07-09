@@ -1970,34 +1970,37 @@
                 setupEventListeners();
                 updateCarousel();
                 setupLazyLoading();
-                // Ensure initial state is 'browse' and URL is clean
-                if (window.location.hash) { // If there's a hash on initial load
-                    const hash = window.location.hash;
-                    // Check if it's a viewer hash we might want to restore
-                    if (hash.startsWith('#viewer/')) {
-                        const contentIdToRestore = decodeURIComponent(hash.substring('#viewer/'.length));
-                        const contentToOpen = findContentById(contentIdToRestore);
-                        if (contentToOpen) {
-                            console.log("Init: Restoring viewer for", contentIdToRestore, "from URL hash.");
-                            // openViewer will push the correct 'viewer' state.
-                            // Hide browse sections first, as openViewer expects this.
-                            document.querySelector('.carousel').style.display = 'none';
-                            document.querySelector('.filters-section').style.display = 'none';
-                            document.querySelector('.content-container').style.display = 'none';
-                            openViewer(contentToOpen);
-                            // State is set by openViewer, so we don't need replaceState here for 'viewer'.
-                        } else {
-                            console.warn("Init: Content ID from hash not found:", contentIdToRestore, ". Defaulting to browse view.");
-                            history.replaceState({ page: 'browse' }, 'Browse Content', window.location.pathname + window.location.search);
-                        }
+
+                // Revised initial state and URL handling
+                if (window.location.hash && window.location.hash.startsWith('#viewer/')) {
+                    const contentIdToRestore = decodeURIComponent(window.location.hash.substring('#viewer/'.length));
+                    const contentToOpen = findContentById(contentIdToRestore);
+
+                    if (contentToOpen) {
+                        console.log("Init: Viewer hash detected for", contentIdToRestore);
+                        // FIRST, establish the browse page state by replacing the current state, also removing the hash temporarily.
+                        // This ensures that pressing back from the directly loaded viewer goes to a defined 'browse' state.
+                        history.replaceState({ page: 'browse' }, 'Browse Content', window.location.pathname + window.location.search);
+
+                        // THEN, open the viewer. openViewer() will call pushState, adding the viewer state with the hash.
+                        console.log("Init: Opening viewer for", contentIdToRestore, "after establishing browse state.");
+                        document.querySelector('.carousel').style.display = 'none';
+                        document.querySelector('.filters-section').style.display = 'none';
+                        document.querySelector('.content-container').style.display = 'none';
+                        openViewer(contentToOpen);
                     } else {
-                        // Unknown hash, clean it and set to browse state
-                        console.log("Init: Clearing unknown hash and setting to browse state.");
+                        // Content from hash not found. Default to browse state and clean URL.
+                        console.warn("Init: Content ID from hash '", window.location.hash, "' not found. Defaulting to browse view.");
                         history.replaceState({ page: 'browse' }, 'Browse Content', window.location.pathname + window.location.search);
                     }
                 } else {
-                    // No hash, standard initial browse state
-                    console.log("Init: Setting initial state to browse.");
+                    // No viewer hash. Could be no hash, or an unknown hash.
+                    // Standard initial browse state, clean URL in either case.
+                    if (window.location.hash && window.location.hash !== "#") { // Also check for just "#"
+                        console.log("Init: Clearing unknown hash '", window.location.hash, "' and setting initial state to browse.");
+                    } else {
+                        console.log("Init: Setting initial state to browse.");
+                    }
                     history.replaceState({ page: 'browse' }, 'Browse Content', window.location.pathname + window.location.search);
                 }
             });
