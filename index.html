@@ -566,53 +566,78 @@
             border-radius: var(--radius);
         }
 
-        /* NEW: Server selector inside player */
+        /* UPDATED: Server selector inside player - Smaller and less opaque */
         .player-server-selector {
             position: absolute;
-            top: 10px;
-            right: 10px;
+            top: 8px; /* Adjusted for smaller size */
+            right: 8px; /* Adjusted for smaller size */
             z-index: 10;
-            background: rgba(0, 0, 0, 0.7);
-            border-radius: 4px;
-            padding: 5px;
+            background: rgba(20, 20, 20, 0.5); /* Slightly more transparent */
+            border-radius: 3px;
+            padding: 3px 5px; /* Reduced padding */
             display: flex;
             align-items: center;
+            opacity: 0.6; /* Default reduced opacity */
+            transition: opacity 0.3s ease;
+        }
+
+        .player-container:hover .player-server-selector,
+        .player-server-selector:hover,
+        .player-server-selector select:focus {
+            opacity: 1; /* Full opacity on hover/focus */
         }
 
         .player-server-selector select {
             background: transparent;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            color: white;
-            padding: 5px 8px;
-            border-radius: 4px;
-            font-size: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: var(--youtube-light-gray);
+            padding: 4px 6px; /* Reduced padding */
+            border-radius: 3px;
+            font-size: 11px; /* Reduced font size */
             cursor: pointer;
             appearance: none;
             -webkit-appearance: none;
             -moz-appearance: none;
-            width: 80px;
+            width: 70px; /* Slightly reduced width */
+            outline: none;
         }
 
         .player-server-selector select:focus {
-            outline: none;
             border-color: var(--youtube-red);
+            background: rgba(0,0,0,0.3);
         }
 
         .player-server-selector i {
-            margin-left: 5px;
-            color: white;
-            font-size: 12px;
+            margin-left: 4px;
+            color: var(--youtube-light-gray);
+            font-size: 10px; /* Reduced icon size */
         }
 
+        /* UPDATED: Viewer Content - YouTube Style Grid Layout */
         .viewer-content {
-            display: flex;
-            gap: 30px;
-            flex-wrap: wrap;
+            display: grid;
+            grid-template-columns: 1fr; /* Default for mobile */
+            gap: 20px; /* Reduced gap */
+        }
+
+        @media (min-width: 992px) { /* Apply grid for larger screens */
+            .viewer-content {
+                grid-template-columns: minmax(0, 2.5fr) minmax(0, 1fr); /* Main content and sidebar */
+                gap: 24px;
+                align-items: start; /* Align items to the start of the grid cell */
+            }
+            .related-videos {
+                /* Make sidebar scrollable if content exceeds viewport height */
+                /* Consider viewport height minus header/player height for max-height */
+                max-height: calc(100vh - var(--header-height) - 40px); /* Adjust 40px for padding/margins */
+                overflow-y: auto;
+                padding-right: 5px; /* Space for scrollbar if it appears */
+            }
         }
 
         .video-details {
-            flex: 1;
-            min-width: 300px;
+            /* flex: 1; No longer needed with grid */
+            min-width: 0; /* Allow shrinking in grid */
         }
 
         .video-info {
@@ -718,109 +743,164 @@
         }
 
         .episode-selector-container {
-            display: none;
+            display: none; /* JS handles visibility */
             margin-bottom: 20px;
-            background-color: var(--youtube-gray);
+            background-color: var(--youtube-gray); /* Keep background for grouping */
             border-radius: var(--radius);
             padding: 15px;
+        }
+        .episode-selector-container h3 {
+            font-size: 16px;
+            color: var(--light);
+            margin-bottom: 10px;
+            font-weight: 600;
         }
 
         .episode-selector {
             width: 100%;
-            padding: 10px 15px;
-            border-radius: var(--radius);
-            background-color: var(--dark-3);
-            border: 1px solid var(--dark-2);
+            padding: 10px 12px; /* Adjusted padding */
+            border-radius: 4px; /* Sharper radius */
+            background-color: var(--youtube-dark-gray); /* Darker background for select */
+            border: 1px solid var(--dark-3); /* Subtle border */
             color: var(--light);
-            font-size: 16px;
+            font-size: 14px; /* Slightly smaller font */
             cursor: pointer;
         }
+        .episode-selector:focus {
+            outline: none;
+            border-color: var(--youtube-red);
+        }
+
 
         .season-selector {
-            display: none;
-            margin-top: 30px;
+            display: none; /* JS handles visibility */
+            margin-bottom: 20px; /* Consistent margin */
             background-color: var(--youtube-gray);
             border-radius: var(--radius);
             padding: 15px;
         }
 
         .season-selector h3 {
-            margin-bottom: 20px;
+            font-size: 16px;
+            color: var(--light);
+            margin-bottom: 10px;
+            font-weight: 600;
         }
 
         .seasons-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-            gap: 15px;
+            /* Adjust columns for sidebar context if moved, or make it scrollable horizontally */
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); /* Smaller cards */
+            gap: 10px;
+            max-height: 300px; /* Example: limit height and make scrollable if many seasons */
+            overflow-y: auto; /* Add scroll if content overflows */
         }
 
         .season-card {
-            background-color: var(--dark-3);
-            border-radius: var(--radius);
+            background-color: var(--youtube-dark-gray); /* Consistent with episode selector */
+            border-radius: 4px; /* Sharper radius */
             overflow: hidden;
             cursor: pointer;
             transition: var(--transition);
+            border: 1px solid var(--dark-3); /* Subtle border */
         }
 
         .season-card:hover {
-            transform: translateY(-5px);
-            box-shadow: var(--shadow);
+            transform: translateY(-3px); /* Subtle hover */
+            border-color: var(--youtube-red);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
         }
 
         .season-card img {
             width: 100%;
-            height: 160px;
+            height: 100px; /* Reduced height for smaller cards */
             object-fit: cover;
         }
 
         .season-info {
-            padding: 12px;
-            text-align: center;
+            padding: 10px; /* Adjusted padding */
+            text-align: left; /* Align text left for better readability */
         }
 
         .season-info h4 {
-            font-size: 15px;
+            font-size: 13px; /* Smaller font */
             color: var(--light);
+            margin: 0;
+            line-height: 1.3;
+             display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Styling for scrollbars in season/episode lists and sidebar */
+        .seasons-grid::-webkit-scrollbar,
+        .related-grid::-webkit-scrollbar,
+        .related-videos::-webkit-scrollbar { /* Added .related-videos for consistent sidebar scrollbar */
+            width: 8px;
+        }
+        .seasons-grid::-webkit-scrollbar-track,
+        .related-grid::-webkit-scrollbar-track,
+        .related-videos::-webkit-scrollbar-track {
+            background: var(--youtube-dark-gray); /* Match sidebar background */
+            border-radius: 4px;
+        }
+        .seasons-grid::-webkit-scrollbar-thumb,
+        .related-grid::-webkit-scrollbar-thumb,
+        .related-videos::-webkit-scrollbar-thumb {
+            background-color: var(--youtube-light-gray);
+            border-radius: 4px;
+            border: 2px solid var(--youtube-dark-gray); /* Creates a 'track' around the thumb */
+        }
+        .seasons-grid::-webkit-scrollbar-thumb:hover,
+        .related-grid::-webkit-scrollbar-thumb:hover,
+        .related-videos::-webkit-scrollbar-thumb:hover {
+            background-color: var(--youtube-red);
         }
 
         .related-videos {
-            width: 400px;
-        }
-
-        @media (max-width: 1200px) {
-            .related-videos {
-                width: 100%;
-            }
-        }
-
-        .related-title {
-            margin: 0 0 20px;
-            font-size: 20px;
-            color: var(--light);
-        }
-
-        .related-grid {
+            /* width: 400px; No longer fixed width, grid handles it */
+            min-width: 0; /* Allow shrinking in grid */
             display: flex;
             flex-direction: column;
             gap: 15px;
         }
 
+        /* Removed max-width: 1200px media query for .related-videos width: 100%
+           as grid layout handles this better. */
+
+        .related-title {
+            margin: 0 0 15px; /* Adjusted margin */
+            font-size: 18px; /* Slightly smaller title for sidebar */
+            color: var(--light);
+            font-weight: 600;
+        }
+
+        .related-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 12px; /* Adjusted gap */
+        }
+
         .related-card {
             display: flex;
-            gap: 12px;
+            gap: 10px; /* Adjusted gap */
             cursor: pointer;
             transition: var(--transition);
+            padding: 8px; /* Add some padding for hover effect area */
+            border-radius: var(--radius);
         }
 
         .related-card:hover {
             background-color: var(--youtube-gray);
-            border-radius: var(--radius);
+            /* border-radius is already set */
         }
 
         .related-thumbnail {
-            width: 180px;
-            height: 100px;
-            border-radius: var(--radius);
+            width: 160px; /* Adjusted for sidebar */
+            height: 90px;  /* Maintain 16:9 approx ratio */
+            border-radius: 4px; /* Smaller radius */
             overflow: hidden;
             flex-shrink: 0;
         }
@@ -1090,20 +1170,22 @@
 
         /* Responsive Styles */
         @media (max-width: 1200px) {
-            .viewer-content {
-                grid-template-columns: 1fr;
-            }
+            /* .viewer-content grid adjustment already handled by min-width: 992px for multi-column */
             
             .carousel {
                 height: 350px;
             }
             
-            .related-videos {
-                width: 100%;
-            }
+            /* .related-videos width: 100%; No longer needed due to grid */
         }
 
-        @media (max-width: 992px) {
+        @media (max-width: 991px) { /* Changed from 992px to target below desktop grid */
+            .viewer-content {
+                grid-template-columns: 1fr; /* Stack columns for tablets and mobiles */
+            }
+            .related-videos {
+                 margin-top: 20px; /* Reduced margin when stacked for tighter layout */
+            }
             .carousel {
                 height: 300px;
             }
@@ -1115,12 +1197,12 @@
             .search-container {
                 width: 50%;
             }
-
-            .related-videos {
-                width: 100%;
-                margin-top: 30px;
-            }
             
+            .player-container {
+                /* Ensure player maintains aspect ratio and doesn't get too small */
+                min-height: 200px; /* Example minimum height for mobile */
+            }
+
             .video-meta {
                 flex-direction: column;
                 align-items: flex-start;
@@ -1755,7 +1837,10 @@
             likeBtn: document.getElementById('like-btn'),
             dislikeBtn: document.getElementById('dislike-btn'),
             likeCountSpan: document.getElementById('like-count-span'),
-            dislikeCountSpan: document.getElementById('dislike-count-span')
+            dislikeCountSpan: document.getElementById('dislike-count-span'),
+            // Containers for moving elements
+            relatedVideosContainer: document.querySelector('.related-videos'),
+            videoDetailsContainer: document.querySelector('.video-details')
         };
         
         // State
@@ -2255,6 +2340,14 @@
             
             // Hide season selector by default
             elements.seasonSelector.style.display = 'none';
+
+            // Move selectors to their default position (inside videoDetails) before deciding to move them
+            if (elements.episodeSelectorContainer.parentNode !== elements.videoDetailsContainer) {
+                elements.videoDetailsContainer.appendChild(elements.episodeSelectorContainer);
+            }
+            if (elements.seasonSelector.parentNode !== elements.videoDetailsContainer) {
+                elements.videoDetailsContainer.appendChild(elements.seasonSelector);
+            }
             
             // Reset season and episode
             currentSeason = null;
@@ -2270,7 +2363,14 @@
             elements.seasonsGrid.innerHTML = '';
             
             if (content.type === 'series' && content.Seasons) {
+                // Move selectors to sidebar for series view
+                if (elements.relatedVideosContainer) { // Ensure container exists
+                    elements.relatedVideosContainer.prepend(elements.seasonSelector);
+                    elements.relatedVideosContainer.prepend(elements.episodeSelectorContainer);
+                }
                 elements.seasonSelector.style.display = 'block';
+                // episodeSelectorContainer display is handled in openSeason
+
                 content.Seasons.forEach(season => {
                     const seasonCard = document.createElement('div');
                     seasonCard.className = 'season-card';
@@ -2493,6 +2593,14 @@
             if (playerInstance && playerInstance.source) {
                 playerInstance.source = null;
             }
+
+            // Move season/episode selectors back to videoDetailsContainer and hide them
+            if (elements.videoDetailsContainer) { // Ensure container exists
+                elements.videoDetailsContainer.appendChild(elements.episodeSelectorContainer);
+                elements.videoDetailsContainer.appendChild(elements.seasonSelector);
+            }
+            elements.episodeSelectorContainer.style.display = 'none';
+            elements.seasonSelector.style.display = 'none';
             
             // Reset viewer state
             currentEpisode = null;
