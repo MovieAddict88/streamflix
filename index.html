@@ -2393,7 +2393,8 @@
             } else if (content.type === 'movie') {
                 // Play the first server by default for movies
                 if (content.Servers && content.Servers.length > 0) {
-                    playUrl(content.Servers[0].url);
+                    const firstServer = content.Servers[0];
+                    playUrl(firstServer.url, firstServer.subtitle);
                 }
             }
             
@@ -2469,9 +2470,61 @@
             elements.dislikeBtn.addEventListener('click', handleDislike);
         }
         
+        // Helper function to get BCP 47 language code
+        function getLanguageCode(languageName) {
+            if (!languageName) return 'en'; // Default to English if no name provided
+            const name = languageName.toLowerCase();
+            const mapping = {
+                'english': 'en',
+                'filipino': 'fil',
+                'tagalog': 'tl',
+                'spanish': 'es',
+                'japanese': 'ja',
+                'korean': 'ko',
+                'chinese': 'zh',
+                'french': 'fr',
+                'german': 'de',
+                'hindi': 'hi',
+                'arabic': 'ar',
+                // Add more mappings as needed
+            };
+            if (mapping[name]) {
+                return mapping[name];
+            }
+            // Fallback: try to use the first two letters if it's a common short code
+            if (name.length >= 2) {
+                // Very basic check, could be improved with a list of valid 2-letter codes
+                const commonShortCodes = ['en', 'es', 'fr', 'de', 'ja', 'ko', 'it', 'pt', 'ru'];
+                const shortCode = name.substring(0, 2);
+                if (commonShortCodes.includes(shortCode)) return shortCode;
+            }
+            return languageName; // Fallback to the original name if no mapping found
+        }
+
         // Play URL with YouTube support
-        function playUrl(url) {
+        function playUrl(url, subtitles) { // Added subtitles parameter
             if (!url || !playerInstance) return;
+
+            let plyrTracks = [];
+            if (subtitles && Array.isArray(subtitles) && subtitles.length > 0) {
+                plyrTracks = subtitles
+                    .filter(sub => sub && sub.url && sub.title && sub.format) // Ensure basic properties exist
+                    .sort((a, b) => { // Prioritize VTT
+                        if (a.format.toLowerCase() === 'vtt' && b.format.toLowerCase() !== 'vtt') return -1;
+                        if (a.format.toLowerCase() !== 'vtt' && b.format.toLowerCase() === 'vtt') return 1;
+                        return 0;
+                    })
+                    .map((sub, index) => {
+                        const srclang = getLanguageCode(sub.title);
+                        return {
+                            kind: 'captions',
+                            label: sub.title,
+                            srclang: srclang,
+                            src: sub.url,
+                            default: index === 0 && sub.format.toLowerCase() === 'vtt' // Default first VTT track
+                        };
+                    });
+            }
             
             // Check if it's a YouTube URL
             if (isYouTubeUrl(url)) {
@@ -2482,7 +2535,8 @@
                         sources: [{
                             src: videoId,
                             provider: 'youtube'
-                        }]
+                        }],
+                        tracks: plyrTracks // Add tracks for YouTube if any
                     };
                     return;
                 }
@@ -2494,7 +2548,8 @@
                 sources: [{
                     src: url,
                     type: url.includes('m3u8') ? 'application/x-mpegURL' : 'video/mp4'
-                }]
+                }],
+                tracks: plyrTracks // Add tracks for regular video if any
             };
         }
         
@@ -2525,7 +2580,21 @@
             
             // Add change event
             elements.serverSelect.onchange = function() {
-                playUrl(this.value);
+                const selectedUrl = this.value;
+                // Find the server object that matches the selected URL to get subtitles
+                const currentItem = currentSeries || currentContentInfo; // Use series if available, else general content info
+                let currentServers = [];
+
+                if (currentItem) {
+                    if (currentEpisode && currentEpisode.Servers) { // If an episode is active
+                        currentServers = currentEpisode.Servers;
+                    } else if (currentItem.Servers) { // If it's a movie or series without specific episode context yet
+                        currentServers = currentItem.Servers;
+                    }
+                }
+
+                const selectedServer = currentServers.find(server => server.url === selectedUrl);
+                playUrl(selectedUrl, selectedServer ? selectedServer.subtitle : undefined);
             };
         }
         
@@ -2570,7 +2639,8 @@
             
             // Play the first server
             if (episode.Servers && episode.Servers.length > 0) {
-                playUrl(episode.Servers[0].url);
+                const firstServer = episode.Servers[0];
+                playUrl(firstServer.url, firstServer.subtitle);
             }
         }
         
