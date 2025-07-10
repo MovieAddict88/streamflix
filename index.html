@@ -146,6 +146,34 @@
             border-radius: 4px;
         }
 
+        /* New styles for search result image container and its broken state */
+        .search-img-container {
+            width: 50px; /* Match original img width */
+            height: 70px; /* Match original img height */
+            border-radius: 4px; /* Match original img border-radius */
+            overflow: hidden;
+            background-color: var(--youtube-dark-gray); /* Fallback background */
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0; /* Prevent shrinking if flex container is crowded */
+        }
+        .search-img-container img { /* Styles for the actual image inside the container */
+            /* These styles are now applied to the img tag directly in JS or inherited */
+            /* width: 100%; height: 100%; object-fit: cover; */
+            /* The object-fit is important if the img isn't perfectly aspect ratio of container */
+        }
+        .search-img-container.broken-image {
+            background-image: url('https://movie-fcs.fwh.is/cinecraze/cinecraze.png');
+            background-repeat: no-repeat;
+            background-position: center center;
+            background-size: 80%;
+        }
+        .search-img-container.broken-image img {
+            display: none !important;
+        }
+
         .search-result-info h4 {
             font-size: 16px;
             margin-bottom: 5px;
@@ -2643,20 +2671,17 @@
                         screen.orientation.unlock();
                     }
                     // For mobile, restore search bar visibility
-                    // Check a short delay for CSS to remove fullscreen active class and header to reappear
-                    setTimeout(() => {
-                        if (window.innerWidth <= 768) { // Re-check if still on mobile
-                            console.log("Exit fullscreen mobile: should search be visible?", wasSearchVisibleBeforeFullscreen);
-                            if (wasSearchVisibleBeforeFullscreen) {
-                                elements.searchContainer.classList.add('show');
-                                // elements.searchInput.focus(); // Optional: Re-focusing might be jarring
-                            } else {
-                                elements.searchContainer.classList.remove('show');
-                            }
-                            // Reset the flag
-                            wasSearchVisibleBeforeFullscreen = false;
+                    if (window.innerWidth <= 768) { // Re-check if still on mobile
+                        console.log("Exit fullscreen mobile (immediate): should search be visible?", wasSearchVisibleBeforeFullscreen);
+                        if (wasSearchVisibleBeforeFullscreen) {
+                            elements.searchContainer.classList.add('show');
+                            // elements.searchInput.focus(); // Optional: Re-focusing might be jarring. Avoid for now.
+                        } else {
+                            elements.searchContainer.classList.remove('show');
                         }
-                    }, 100); // 100ms delay, adjust if needed
+                        // Reset the flag immediately after use
+                        wasSearchVisibleBeforeFullscreen = false;
+                    }
                 });
             }
             
@@ -3176,13 +3201,29 @@
                 results.slice(0, 5).forEach(result => {
                     const resultItem = document.createElement('div');
                     resultItem.className = 'search-result-item';
+
+                    // Create the image container and image element structure
+                    // The .search-result-item already uses display:flex, align-items:center
+                    // So .search-img-container will align nicely.
                     resultItem.innerHTML = `
-                        <img src="${result.thumbnail}" alt="${result.title}">
+                        <div class="search-img-container">
+                            <img src="${result.thumbnail}" alt="${result.title}" style="width: 100%; height: 100%; object-fit: cover;">
+                        </div>
                         <div class="search-result-info">
                             <h4>${result.title}</h4>
                             <p>${result.type} • ${result.year || ''}</p>
                         </div>
                     `;
+
+                    const imgElement = resultItem.querySelector('.search-img-container img');
+                    const imgContainer = resultItem.querySelector('.search-img-container');
+
+                    if (imgElement && imgContainer) {
+                        imgElement.onerror = function() {
+                            imgContainer.classList.add('broken-image');
+                        };
+                    }
+
                     resultItem.addEventListener('click', () => {
                         // Find the content and open viewer
                         const found = cachedContent.find(item => item.Title === result.title);
