@@ -452,19 +452,17 @@
             transition: opacity 0.3s ease;
         }
 
-        .card-img.broken-image::before {
-            content: "\\f128"; /* FontAwesome question icon */
-            font-family: "Font Awesome 6 Free";
-            font-weight: 900; /* For solid icons */
-            font-size: 48px;
-            color: var(--youtube-light-gray);
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
+        /* Styles for when the image is broken - uses background image for logo */
+        .card-img.broken-image {
+            background-image: url('https://movie-fcs.fwh.is/cinecraze/cinecraze.png');
+            background-repeat: no-repeat;
+            background-position: center center;
+            background-size: 70%; /* Adjust percentage to make logo smaller than container */
+                                  /* `contain` would fit it, 70% makes it a bit smaller within the area */
         }
+
         .card-img.broken-image img {
-            display: none; /* Hide the actual broken image element */
+            display: none !important; /* Hide the actual broken image element, !important to be sure */
         }
 
         .card-img img.loaded {
