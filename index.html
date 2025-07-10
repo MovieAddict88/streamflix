@@ -972,6 +972,18 @@
             object-fit: cover;
         }
 
+        /* Styles for broken images in related content thumbnails */
+        .related-thumbnail.broken-image {
+            background-image: url('https://movie-fcs.fwh.is/cinecraze/cinecraze.png');
+            background-repeat: no-repeat;
+            background-position: center center;
+            background-size: 60%; /* Adjusted for smaller thumbnail size */
+        }
+
+        .related-thumbnail.broken-image img {
+            display: none !important;
+        }
+
         .related-info {
             flex: 1;
         }
@@ -1933,6 +1945,7 @@
         let currentEpisode = null;
         let currentSeason = null;
         let currentSeries = null;
+        let wasSearchVisibleBeforeFullscreen = false; // For mobile fullscreen search bar state
         
         // Function to shuffle an array
         function shuffleArray(array) {
@@ -2540,6 +2553,7 @@
             relatedContent.forEach(item => {
                 const card = document.createElement('div');
                 card.className = 'related-card';
+                // Set innerHTML first
                 card.innerHTML = `
                     <div class="related-thumbnail">
                         <img src="${item.Thumbnail || item.Poster}" alt="${item.Title}">
@@ -2550,6 +2564,19 @@
                         <div class="related-meta">${item.Rating || 'N/A'} • ${item.Year || ''}</div>
                     </div>
                 `;
+
+                // Get the img element and its parent thumbnail container
+                const imgElement = card.querySelector('.related-thumbnail img');
+                const thumbnailContainer = card.querySelector('.related-thumbnail');
+
+                if (imgElement && thumbnailContainer) {
+                    imgElement.onerror = function() {
+                        thumbnailContainer.classList.add('broken-image');
+                        // No need to add 'loaded' class here as these are not lazy-loaded
+                        // and opacity isn't initially 0 for these direct-src images.
+                    };
+                }
+
                 card.addEventListener('click', () => openViewer(item));
                 elements.relatedGrid.appendChild(card);
             });
@@ -2600,12 +2627,36 @@
                             console.log('Orientation lock failed: ', error);
                         });
                     }
+                    // For mobile, manage search bar visibility
+                    if (window.innerWidth <= 768) { // Check if on mobile (use consistent breakpoint)
+                        wasSearchVisibleBeforeFullscreen = elements.searchContainer.classList.contains('show');
+                        // The CSS `html.plyr--fullscreen-active header { display: none !important; }`
+                        // handles hiding. No need to remove 'show' here as it might interfere
+                        // if user quickly exits fullscreen before CSS applies fully, though unlikely.
+                        // The primary goal is to restore correctly on exit.
+                        console.log("Enter fullscreen mobile: search was visible?", wasSearchVisibleBeforeFullscreen);
+                    }
                 });
 
                 playerInstance.on('exitfullscreen', () => {
                     if (screen.orientation && screen.orientation.unlock) {
                         screen.orientation.unlock();
                     }
+                    // For mobile, restore search bar visibility
+                    // Check a short delay for CSS to remove fullscreen active class and header to reappear
+                    setTimeout(() => {
+                        if (window.innerWidth <= 768) { // Re-check if still on mobile
+                            console.log("Exit fullscreen mobile: should search be visible?", wasSearchVisibleBeforeFullscreen);
+                            if (wasSearchVisibleBeforeFullscreen) {
+                                elements.searchContainer.classList.add('show');
+                                // elements.searchInput.focus(); // Optional: Re-focusing might be jarring
+                            } else {
+                                elements.searchContainer.classList.remove('show');
+                            }
+                            // Reset the flag
+                            wasSearchVisibleBeforeFullscreen = false;
+                        }
+                    }, 100); // 100ms delay, adjust if needed
                 });
             }
             
