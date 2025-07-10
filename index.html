@@ -2613,10 +2613,10 @@ let isMobileSearchForcedHidden = false; // Flag for mobile search visibility aft
                     // --- FIX FOR MOBILE SEARCH BAR VISIBILITY ON FULLSCREEN EXIT ---
                     const isMobileView = window.innerWidth <= 768;
                     if (isMobileView) {
-                        isMobileSearchForcedHidden = true; // Set the flag
+                        isMobileSearchForcedHidden = true; // Set the flag, indicating search should be hidden by default after FS exit
                         if (elements.searchContainer) {
-                            elements.searchContainer.classList.remove('show');
-                            elements.searchContainer.style.display = 'none'; 
+                            elements.searchContainer.classList.remove('show'); // Ensure 'show' class is removed
+                            // No direct style.display = 'none' here; CSS rules should handle default hiding.
                         }
                     }
                     // --- END FIX ---
@@ -3415,55 +3415,56 @@ let isMobileSearchForcedHidden = false; // Flag for mobile search visibility aft
         // --- End View Counter Functionality ---
 
         // Improved mobile search toggle behavior
-const mobileBtn = document.getElementById('mobile-search-btn');
-const searchContainer = document.querySelector('.search-container');
-const searchInput = document.getElementById('search-input');
+        const mobileBtn = document.getElementById('mobile-search-btn');
+        const searchContainer = document.querySelector('.search-container');
+        const searchInput = document.getElementById('search-input');
 
-// Toggle search container
-mobileBtn?.addEventListener('click', () => {
-  isMobileSearchForcedHidden = false; // User is explicitly opening search
-  searchContainer.classList.add('show'); // Explicitly show
-  // The .show class has 'display: block !important', which should override inline 'display: none'
-  searchInput.focus();
-});
+        // Toggle search container
+        mobileBtn?.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent click from immediately closing search if mobileBtn is inside searchContainer or similar logic
+            isMobileSearchForcedHidden = false; // User is explicitly interacting with the search
+            searchContainer.classList.toggle('show');
+            if (searchContainer.classList.contains('show')) {
+                searchInput.focus();
+            }
+        });
 
-// Prevent closing when clicking inside the search
-searchContainer?.addEventListener('click', (e) => {
-  e.stopPropagation();
-});
+        // Prevent closing when clicking inside the search input area itself
+        searchContainer?.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
 
-// Close search when clicking outside
-document.addEventListener('click', (e) => {
-  if (!searchContainer.contains(e.target) && !mobileBtn.contains(e.target)) {
-    searchContainer.classList.remove('show');
-  }
-});
-// Ensure search container is visible on desktop
-function fixSearchVisibilityOnResize() {
-  const isMobileView = window.innerWidth <= 768;
+        // Close search when clicking outside
+        document.addEventListener('click', (e) => {
+            // Check if the click is outside the searchContainer AND outside the mobileSearchBtn
+            if (searchContainer.classList.contains('show') && 
+                !searchContainer.contains(e.target) && 
+                !mobileBtn.contains(e.target)) {
+                searchContainer.classList.remove('show');
+            }
+        });
 
-  if (isMobileView && isMobileSearchForcedHidden) {
-    // If mobile view and search is forced hidden (e.g., after fullscreen exit)
-    // ensure it stays hidden, overriding other logic.
-    if (elements.searchContainer) { // elements.searchContainer should be used for consistency
-        elements.searchContainer.classList.remove('show');
-        elements.searchContainer.style.display = 'none';
-    }
-    return; // Exit early
-  }
+        // Ensure search container is visible on desktop and correctly hidden/shown on mobile based on 'show' class
+        function fixSearchVisibilityOnResize() {
+            const isMobileView = window.innerWidth <= 768;
 
-  if (!isMobileView) { // Desktop
-    if (elements.searchContainer) {
-        elements.searchContainer.classList.remove('show'); // Should not use 'show' class for desktop logic
-        elements.searchContainer.style.display = 'block';  // Standard display for desktop
-    }
-  }
-  // For mobile view when not forcedHidden, visibility is controlled by the '.show' class
-  // and the mobile search button, so no specific action here.
-}
+            if (!isMobileView) { // Desktop
+                // On desktop, search container should always be visible, remove 'show' class as it's mobile-specific control
+                searchContainer.classList.remove('show');
+                // The CSS `@media (min-width: 769px) { .search-container { display: block !important; } }` should handle visibility.
+                // No direct style.display needed here if CSS is correct.
+            } else { // Mobile
+                // On mobile, its visibility is controlled by 'show' class.
+                // If isMobileSearchForcedHidden is true, it means we want it hidden unless explicitly shown again.
+                if (isMobileSearchForcedHidden) {
+                    searchContainer.classList.remove('show');
+                }
+                // If not forced hidden, its state (show or not) is preserved from user interaction.
+            }
+        }
 
-window.addEventListener('resize', fixSearchVisibilityOnResize);
-window.addEventListener('load', fixSearchVisibilityOnResize);
+        window.addEventListener('resize', fixSearchVisibilityOnResize);
+        window.addEventListener('load', fixSearchVisibilityOnResize);
 
         
     </script>
