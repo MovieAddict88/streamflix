@@ -1604,6 +1604,38 @@
             display: block; /* Use a class to control display for transitions */
             opacity: 1;
         }
+
+        /* CSS for Video Object-Fit Modes */
+        .plyr video.video-fit-contain {
+            object-fit: contain !important; /* Default behavior, ensures full visibility */
+        }
+
+        .plyr video.video-fit-fill {
+            object-fit: fill !important;    /* Stretches to fill, may alter aspect ratio */
+        }
+
+        .plyr video.video-fit-cover {
+            object-fit: cover !important;   /* Zooms to fill, maintains aspect ratio, may crop */
+        }
+
+        .plyr video.video-fit-none {
+            object-fit: none !important;    /* Actual size, may be cropped or have empty space */
+            width: auto !important;         /* Allow intrinsic width */
+            height: auto !important;        /* Allow intrinsic height */
+            max-width: none !important;     /* Override any max-width constraints */
+            max-height: none !important;    /* Override any max-height constraints */
+        }
+
+        /* Optional: Class for the player container when video-fit-none is active and video is larger */
+        .plyr.plyr--html5.video-mode-actual-size-overflow {
+            overflow: hidden; /* To hide parts of the video that exceed player bounds */
+        }
+
+        /* Styling for active state on custom buttons (optional, but good for UX) */
+        .plyr__control[data-plyr-action].active {
+            /* Example: Use the Plyr main color to indicate active state */
+            color: var(--plyr-color-main, #00b3ff);
+        }
         
     </style>
 </head>
@@ -1943,7 +1975,156 @@
         let currentEpisode = null;
         let currentSeason = null;
         let currentSeries = null;
-let isMobileSearchForcedHidden = false; // Flag for mobile search visibility after fullscreen exit
+        let isMobileSearchForcedHidden = false; // Flag for mobile search visibility after fullscreen exit
+        
+        // Store references to the zoom/fit buttons (can still be useful for internal logic)
+        let fitContainButton, fitFillButton, fitCoverButton, fitNoneButton;
+
+        // Function to setup custom UI extensions for the Plyr player
+        function setupPlayerUIExtensions(player) {
+            if (!player || !player.elements.controls) {
+                // It's possible this gets called before controls are fully ready, especially if called from multiple events.
+                // console.warn('Plyr player or controls not ready for UI extensions.');
+                return;
+            }
+
+            const controlsContainer = player.elements.controls;
+            const videoElement = player.elements.media;
+
+            // --- START: Idempotency: Remove existing custom zoom/fit buttons before re-adding ---
+            const existingCustomButtons = controlsContainer.querySelectorAll('[data-plyr-action^="fit-"]');
+            existingCustomButtons.forEach(btn => btn.remove());
+            // --- END: Idempotency ---
+
+            // Helper function to create a zoom/fit button
+            function createZoomFitButton(action, iconClass, tooltipText) {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'plyr__control';
+                button.dataset.plyrAction = action; // Custom attribute to identify the button's action
+
+                const icon = document.createElement('i');
+                icon.className = iconClass; // e.g., 'fas fa-compress-alt'
+                button.appendChild(icon);
+
+                const tooltip = document.createElement('span');
+                tooltip.className = 'plyr__tooltip';
+                tooltip.role = 'tooltip';
+                tooltip.textContent = tooltipText;
+                button.appendChild(tooltip);
+
+                button.addEventListener('click', () => {
+                    if (!videoElement) return;
+                    
+                    // Clear all fit-related classes from video
+                    videoElement.classList.remove('video-fit-contain', 'video-fit-fill', 'video-fit-cover', 'video-fit-none');
+                    
+                    // Remove active class from all zoom/fit buttons
+                    const allZoomButtons = [fitContainButton, fitFillButton, fitCoverButton, fitNoneButton];
+                    allZoomButtons.forEach(btn => {
+                        if (btn) btn.classList.remove('active');
+                    });
+                    
+                    // Remove overflow class from player container (will be re-added if 'fit-none' is chosen)
+                    if (player.elements.container) {
+                        player.elements.container.classList.remove('video-mode-actual-size-overflow');
+                    }
+
+                    // Apply the new class and active state to the clicked button
+                    switch (action) {
+                        case 'fit-contain':
+                            videoElement.classList.add('video-fit-contain');
+                            if (fitContainButton) fitContainButton.classList.add('active');
+                            break;
+                        case 'fit-fill':
+                            videoElement.classList.add('video-fit-fill');
+                            if (fitFillButton) fitFillButton.classList.add('active');
+                            break;
+                        case 'fit-cover':
+                            videoElement.classList.add('video-fit-cover');
+                            if (fitCoverButton) fitCoverButton.classList.add('active');
+                            break;
+                        case 'fit-none':
+                            videoElement.classList.add('video-fit-none');
+                            if (fitNoneButton) fitNoneButton.classList.add('active');
+                            if (player.elements.container) {
+                                player.elements.container.classList.add('video-mode-actual-size-overflow');
+                            }
+                            break;
+                    }
+                });
+                return button;
+            }
+
+            // Create the buttons (assign to global vars for event listener logic AND for click handler to manage .active state)
+            fitContainButton = createZoomFitButton('fit-contain', 'fas fa-compress-alt', 'Fit to Screen');
+            fitFillButton = createZoomFitButton('fit-fill', 'fas fa-expand-arrows-alt', 'Stretch to Fill');
+            fitCoverButton = createZoomFitButton('fit-cover', 'fas fa-search-plus', 'Zoom to Cover');
+            fitNoneButton = createZoomFitButton('fit-none', 'fas fa-image', 'Actual Size');
+
+            // --- START: Preserve and re-apply active state ---
+            let activeMode = 'fit-contain'; // Default
+            if (videoElement && videoElement.classList) { // Check if videoElement and classList exist
+                if (videoElement.classList.contains('video-fit-fill')) activeMode = 'fit-fill';
+                else if (videoElement.classList.contains('video-fit-cover')) activeMode = 'fit-cover';
+                else if (videoElement.classList.contains('video-fit-none')) activeMode = 'fit-none';
+                // else it remains 'fit-contain'
+            }
+            
+            // Clear any existing fit classes on video element before applying the determined one
+            if (videoElement) {
+                 videoElement.classList.remove('video-fit-contain', 'video-fit-fill', 'video-fit-cover', 'video-fit-none');
+                 if (player.elements.container) {
+                    player.elements.container.classList.remove('video-mode-actual-size-overflow');
+                 }
+            }
+
+            // Apply the determined (or default) active mode and button state
+            switch (activeMode) {
+                case 'fit-contain':
+                    if (videoElement) videoElement.classList.add('video-fit-contain');
+                    if (fitContainButton) fitContainButton.classList.add('active');
+                    break;
+                case 'fit-fill':
+                    if (videoElement) videoElement.classList.add('video-fit-fill');
+                    if (fitFillButton) fitFillButton.classList.add('active');
+                    break;
+                case 'fit-cover':
+                    if (videoElement) videoElement.classList.add('video-fit-cover');
+                    if (fitCoverButton) fitCoverButton.classList.add('active');
+                    break;
+                case 'fit-none':
+                    if (videoElement) videoElement.classList.add('video-fit-none');
+                    if (fitNoneButton) fitNoneButton.classList.add('active');
+                    if (player.elements.container) player.elements.container.classList.add('video-mode-actual-size-overflow');
+                    break;
+                default: // Fallback to fit-contain, though activeMode should always be one of the above
+                    if (videoElement) videoElement.classList.add('video-fit-contain');
+                    if (fitContainButton) fitContainButton.classList.add('active');
+            }
+            // --- END: Preserve and re-apply active state ---
+
+
+            // Injection Logic: Find a reference point, e.g., the fullscreen button or settings button
+            const fullscreenButton = controlsContainer.querySelector('button[data-plyr="fullscreen"]');
+            const settingsButton = controlsContainer.querySelector('button[data-plyr="settings"]');
+            let referenceNode = settingsButton || fullscreenButton; // Prefer settings, fallback to fullscreen
+
+            if (referenceNode) {
+                // Insert new buttons before the reference node 
+                // Order of insertion matters for final visual order (from left to right before refNode)
+                referenceNode.parentNode.insertBefore(fitNoneButton, referenceNode);
+                referenceNode.parentNode.insertBefore(fitCoverButton, referenceNode);
+                referenceNode.parentNode.insertBefore(fitFillButton, referenceNode);
+                referenceNode.parentNode.insertBefore(fitContainButton, referenceNode);
+            } else {
+                // Fallback: append to the main controls container if referenceNode not found
+                controlsContainer.appendChild(fitContainButton);
+                controlsContainer.appendChild(fitFillButton);
+                controlsContainer.appendChild(fitCoverButton);
+                controlsContainer.appendChild(fitNoneButton);
+            }
+        }
         
         // Function to shuffle an array
         function shuffleArray(array) {
@@ -2565,7 +2746,7 @@ let isMobileSearchForcedHidden = false; // Flag for mobile search visibility aft
                     }
                 });
                 
-                // Landscape orientation handling
+                // Landscape orientation handling & Re-assert buttons
                 playerInstance.on('enterfullscreen', () => {
                     if (screen.orientation && screen.orientation.lock) {
                         screen.orientation.lock('landscape').catch(error => {
@@ -2597,7 +2778,8 @@ let isMobileSearchForcedHidden = false; // Flag for mobile search visibility aft
                             elements.fullscreenTitleOverlay.classList.remove('visible');
                         }
                     }
-                    updateNavigationButtonsState(); // Ensure nav buttons are correctly displayed
+                    updateNavigationButtonsState(); 
+                    setupPlayerUIExtensions(playerInstance); // Re-assert/re-inject zoom/fit buttons
                 });
 
                 playerInstance.on('exitfullscreen', () => {
@@ -2609,6 +2791,10 @@ let isMobileSearchForcedHidden = false; // Flag for mobile search visibility aft
                         elements.fullscreenTitleOverlay.classList.remove('visible');
                     }
                     updateNavigationButtonsState(); // Ensure nav buttons are correctly displayed
+                    // Call setupPlayerUIExtensions here as well to ensure controls are correct when exiting fullscreen
+                    // This helps if Plyr also modifies controls on exiting fullscreen.
+                    setupPlayerUIExtensions(playerInstance);
+
 
                     // --- FIX FOR MOBILE SEARCH BAR VISIBILITY ON FULLSCREEN EXIT ---
                     const isMobileView = window.innerWidth <= 768;
@@ -2616,7 +2802,6 @@ let isMobileSearchForcedHidden = false; // Flag for mobile search visibility aft
                         isMobileSearchForcedHidden = true; // Set the flag, indicating search should be hidden by default after FS exit
                         if (elements.searchContainer) {
                             elements.searchContainer.classList.remove('show'); // Ensure 'show' class is removed
-                            // No direct style.display = 'none' here; CSS rules should handle default hiding.
                         }
                     }
                     // --- END FIX ---
@@ -2637,6 +2822,10 @@ let isMobileSearchForcedHidden = false; // Flag for mobile search visibility aft
                         if (titleText) {
                             elements.fullscreenTitleOverlay.classList.add('visible');
                         }
+                    }
+                    // Re-assert/re-inject if in fullscreen and controls are shown
+                    if (playerInstance.fullscreen.active) {
+                        setupPlayerUIExtensions(playerInstance);
                     }
                 });
 
