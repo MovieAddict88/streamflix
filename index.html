@@ -146,6 +146,34 @@
             border-radius: 4px;
         }
 
+        /* New styles for search result image container and its broken state */
+        .search-img-container {
+            width: 50px; /* Match original img width */
+            height: 70px; /* Match original img height */
+            border-radius: 4px; /* Match original img border-radius */
+            overflow: hidden;
+            background-color: var(--youtube-dark-gray); /* Fallback background */
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0; /* Prevent shrinking if flex container is crowded */
+        }
+        .search-img-container img { /* Styles for the actual image inside the container */
+            /* These styles are now applied to the img tag directly in JS or inherited */
+            /* width: 100%; height: 100%; object-fit: cover; */
+            /* The object-fit is important if the img isn't perfectly aspect ratio of container */
+        }
+        .search-img-container.broken-image {
+            background-image: url('https://movie-fcs.fwh.is/cinecraze/cinecraze.png');
+            background-repeat: no-repeat;
+            background-position: center center;
+            background-size: 80%;
+        }
+        .search-img-container.broken-image img {
+            display: none !important;
+        }
+
         .search-result-info h4 {
             font-size: 16px;
             margin-bottom: 5px;
@@ -432,16 +460,37 @@
         }
 
         .content-card.grid .card-img {
-            height: 85%;
+            /* height: 85%; REMOVED to use aspect-ratio */
+            width: 100%;
+            aspect-ratio: 2 / 3; /* Common poster aspect ratio */
+            background-color: var(--youtube-dark-gray); /* Fallback background */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative; /* For icon overlay */
+            overflow: hidden; /* Ensure child img doesn't break bounds */
         }
 
         .card-img img {
             width: 100%;
             height: 100%;
             object-fit: cover;
-            transition: var(--transition);
+            /* transition: var(--transition); NO, use specific opacity transition */
             opacity: 0; /* Start with opacity 0 for lazy loading */
             transition: opacity 0.3s ease;
+        }
+
+        /* Styles for when the image is broken - uses background image for logo */
+        .card-img.broken-image {
+            background-image: url('https://movie-fcs.fwh.is/cinecraze/cinecraze.png');
+            background-repeat: no-repeat;
+            background-position: center center;
+            background-size: 70%; /* Adjust percentage to make logo smaller than container */
+                                  /* `contain` would fit it, 70% makes it a bit smaller within the area */
+        }
+
+        .card-img.broken-image img {
+            display: none !important; /* Hide the actual broken image element, !important to be sure */
         }
 
         .card-img img.loaded {
@@ -478,11 +527,11 @@
 
 .content-card.grid .card-info {
   padding: 10px;
-  min-height: 80px;
+  min-height: 80px; /* Keep this to ensure overall card structure */
   background-color: var(--youtube-dark-gray);
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: space-between; /* Push title to top, meta to bottom */
 }
 
 
@@ -494,16 +543,16 @@
 
 .card-title {
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.4; /* Unitless line-height is better, multiplied by font-size */
   color: var(--light);
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2; /* default 2 lines */
+  -webkit-line-clamp: 2;
   overflow: hidden;
   text-overflow: ellipsis;
   word-break: break-word;
-  font-size: 16px;
-  height: 2.8em;
+  font-size: 16px; /* This is 1em for the height calculation */
+  height: 2.8em; /* Correctly reinstated (2 lines * 1.4 line-height) */
 }
 
 
@@ -511,9 +560,11 @@
 
 .card-meta {
     display: flex;
-    gap: 10px;
-    font-size: 14px;
+    flex-wrap: wrap; /* Allow meta items to wrap if too many */
+    gap: 8px 10px; /* row-gap column-gap */
+    font-size: 13px; /* Slightly smaller to save space */
     color: var(--youtube-light-gray);
+    margin-top: 6px; /* Add some space above the metadata */
 }
 
 
@@ -946,6 +997,18 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
+        }
+
+        /* Styles for broken images in related content thumbnails */
+        .related-thumbnail.broken-image {
+            background-image: url('https://movie-fcs.fwh.is/cinecraze/cinecraze.png');
+            background-repeat: no-repeat;
+            background-position: center center;
+            background-size: 60%; /* Adjusted for smaller thumbnail size */
+        }
+
+        .related-thumbnail.broken-image img {
+            display: none !important;
         }
 
         .related-info {
@@ -1567,6 +1630,13 @@
             transform: translateY(-2px); /* Subtle hover effect */
             color: white !important;
         }
+
+        /* Hide header on mobile when video is fullscreen */
+        @media (max-width: 768px) {
+            html.plyr--fullscreen-active header {
+                display: none !important;
+            }
+        }
         
     </style>
 </head>
@@ -1902,6 +1972,7 @@
         let currentEpisode = null;
         let currentSeason = null;
         let currentSeries = null;
+        // let wasSearchVisibleBeforeFullscreen = false; // REMOVED - No longer needed for always-hide strategy
         
         // Function to shuffle an array
         function shuffleArray(array) {
@@ -1937,7 +2008,39 @@
                 setupEventListeners();
                 updateCarousel();
                 setupLazyLoading();
-                history.replaceState({ page: 'browse' }, 'Browse Content', window.location.pathname + window.location.search);
+
+                // Revised initial state and URL handling
+                if (window.location.hash && window.location.hash.startsWith('#viewer/')) {
+                    const contentIdToRestore = decodeURIComponent(window.location.hash.substring('#viewer/'.length));
+                    const contentToOpen = findContentById(contentIdToRestore);
+
+                    if (contentToOpen) {
+                        console.log("Init: Viewer hash detected for", contentIdToRestore);
+                        // FIRST, establish the browse page state by replacing the current state, also removing the hash temporarily.
+                        // This ensures that pressing back from the directly loaded viewer goes to a defined 'browse' state.
+                        history.replaceState({ page: 'browse' }, 'Browse Content', window.location.pathname + window.location.search);
+
+                        // THEN, open the viewer. openViewer() will call pushState, adding the viewer state with the hash.
+                        console.log("Init: Opening viewer for", contentIdToRestore, "after establishing browse state.");
+                        document.querySelector('.carousel').style.display = 'none';
+                        document.querySelector('.filters-section').style.display = 'none';
+                        document.querySelector('.content-container').style.display = 'none';
+                        openViewer(contentToOpen);
+                    } else {
+                        // Content from hash not found. Default to browse state and clean URL.
+                        console.warn("Init: Content ID from hash '", window.location.hash, "' not found. Defaulting to browse view.");
+                        history.replaceState({ page: 'browse' }, 'Browse Content', window.location.pathname + window.location.search);
+                    }
+                } else {
+                    // No viewer hash. Could be no hash, or an unknown hash.
+                    // Standard initial browse state, clean URL in either case.
+                    if (window.location.hash && window.location.hash !== "#") { // Also check for just "#"
+                        console.log("Init: Clearing unknown hash '", window.location.hash, "' and setting initial state to browse.");
+                    } else {
+                        console.log("Init: Setting initial state to browse.");
+                    }
+                    history.replaceState({ page: 'browse' }, 'Browse Content', window.location.pathname + window.location.search);
+                }
             });
         }
         
@@ -2339,6 +2442,13 @@
                         img.onload = () => {
                             img.classList.add('loaded');
                         };
+                        img.onerror = function() {
+                            if (img.parentNode && img.parentNode.classList.contains('card-img')) {
+                                img.parentNode.classList.add('broken-image');
+                            }
+                            // Mark as 'loaded' to remove opacity:0 and prevent further processing
+                            img.classList.add('loaded');
+                        };
                     }
                 });
             };
@@ -2380,8 +2490,8 @@
             // Increment and display view count
             incrementViewCount(content.Title);
 
-            // History API interaction for viewer state is now removed.
-            // history.pushState({ page: 'viewer', content: currentContentInfo }, 'View Content', '#viewer');
+            // Push a new state for the viewer page
+            history.pushState({ page: 'viewer', contentId: content.Title }, `View ${content.Title}`, `#viewer/${encodeURIComponent(content.Title)}`);
             
             // Hide browse sections
             document.querySelector('.carousel').style.display = 'none';
@@ -2470,6 +2580,7 @@
             relatedContent.forEach(item => {
                 const card = document.createElement('div');
                 card.className = 'related-card';
+                // Set innerHTML first
                 card.innerHTML = `
                     <div class="related-thumbnail">
                         <img src="${item.Thumbnail || item.Poster}" alt="${item.Title}">
@@ -2480,6 +2591,19 @@
                         <div class="related-meta">${item.Rating || 'N/A'} • ${item.Year || ''}</div>
                     </div>
                 `;
+
+                // Get the img element and its parent thumbnail container
+                const imgElement = card.querySelector('.related-thumbnail img');
+                const thumbnailContainer = card.querySelector('.related-thumbnail');
+
+                if (imgElement && thumbnailContainer) {
+                    imgElement.onerror = function() {
+                        thumbnailContainer.classList.add('broken-image');
+                        // No need to add 'loaded' class here as these are not lazy-loaded
+                        // and opacity isn't initially 0 for these direct-src images.
+                    };
+                }
+
                 card.addEventListener('click', () => openViewer(item));
                 elements.relatedGrid.appendChild(card);
             });
@@ -2530,11 +2654,23 @@
                             console.log('Orientation lock failed: ', error);
                         });
                     }
+                    // For mobile, the search bar visibility is now always hidden on exitfullscreen.
+                    // No need to store its state here anymore.
+                    // if (window.innerWidth <= 768) {
+                    //     wasSearchVisibleBeforeFullscreen = elements.searchContainer.classList.contains('show');
+                    //     console.log("Enter fullscreen mobile: search was visible?", wasSearchVisibleBeforeFullscreen);
+                    // }
                 });
 
                 playerInstance.on('exitfullscreen', () => {
                     if (screen.orientation && screen.orientation.unlock) {
                         screen.orientation.unlock();
+                    }
+                    // For mobile, ALWAYS hide search bar on exiting fullscreen.
+                    // User must click search icon again to show it.
+                    if (window.innerWidth <= 768) {
+                        console.log("Exit fullscreen mobile: Forcing search container to hide.");
+                        elements.searchContainer.classList.remove('show');
                     }
                 });
             }
@@ -2772,6 +2908,24 @@
             elements.customControlsContainer.style.display = 'none'; // Hide nav buttons
             
             window.scrollTo(0, 0); // Scroll to top when returning to browse
+
+            // If the current history state is the viewer state, go back to clear it.
+            // This is primarily for when closeViewerInternalLogic is called by an in-app action (like the UI back button),
+            // not by a popstate event (which would mean history already changed).
+            if (history.state && history.state.page === 'viewer') {
+                // Check if the call stack includes the popstate handler to avoid loop
+                // This is a conceptual check; actual implementation might need a flag
+                // For now, we assume direct calls to closeViewerInternalLogic (e.g., from UI back button)
+                // are the ones that should trigger history.back().
+                // A more robust solution might involve passing a parameter to indicate the caller.
+                // history.back(); // This might be too aggressive if popstate also calls this.
+                // Let's refine this: only go back if this function was NOT called by popstate.
+                // For now, we'll rely on the popstate handler to manage its own history.
+                // The main purpose here is UI cleanup. The history part is tricky.
+                // Let's assume for now that if an in-app button closes the viewer,
+                // it should also try to correct the history if we are indeed on a 'viewer' state.
+                // However, the `backButton` event listener is a better place for this specific `history.back()` call.
+            }
         }
 
         // Close viewer (called by back button)
@@ -2779,6 +2933,11 @@
             // This button press now only handles the UI change directly.
             // Browser history (e.g. physical back button) is handled by popstate.
             closeViewerInternalLogic();
+            // If the in-app back button is pressed, and we are in a 'viewer' state,
+            // we should navigate back in history to the 'browse' state.
+            if (history.state && history.state.page === 'viewer') {
+                history.back();
+            }
         }
         
         // Setup event listeners
@@ -2902,32 +3061,52 @@
                 }
             });
             
-            // History API handling
+            // History API handling - This is now the primary popstate listener
             window.addEventListener('popstate', function(event) {
                 const state = event.state;
+                const viewerIsOpen = elements.viewerPage.style.display === 'block';
 
-                // This event means the user has navigated (e.g., via physical back/forward buttons).
-                // Since we no longer push a '#viewer' state, any 'back' action from the main content view
-                // (where viewer is open as an overlay) will navigate to the previous page in global history
-                // or exit if index.html was the first page.
+                console.log("Popstate event fired. Current state:", state, "Viewer open:", viewerIsOpen);
 
-                // The only state we explicitly set is the initial 'browse' state.
-                // If popstate lands us on a null state (e.g. user went back past our initial replaceState)
-                // or on our 'browse' state, and the viewer is open, it means something is out of sync
-                // or the user somehow navigated back to the page while viewer was conceptually open.
-                // In such cases, ensure the viewer is closed and UI is set to browse.
-                if (!state || (state && state.page === 'browse')) {
-                    if (elements.viewerPage.style.display === 'block') {
-                        console.log("Popstate to browse/null state with viewer open. Closing viewer.");
-                        closeViewerInternalLogic();
+                if (state && state.page === 'browse') {
+                    // We've navigated to the 'browse' state (e.g., via device back button from viewer)
+                    if (viewerIsOpen) {
+                        console.log("Popstate: Navigated to 'browse' state, viewer is open. Closing viewer UI.");
+                        closeViewerInternalLogic(); // Just clean up UI, history has already changed
                     }
-                    // If we are on the 'browse' state and there's an unexpected hash, clean it.
-                    // This is mostly a defensive measure.
-                    if (state && state.page === 'browse' && window.location.hash) {
-                        history.replaceState({ page: 'browse' }, 'Browse Content', window.location.pathname + window.location.search);
+                    // Ensure URL hash is clean if we are on browse state
+                    if (window.location.hash && window.location.hash !== "#") { // Check hash is not just "#"
+                         history.replaceState({ page: 'browse' }, 'Browse Content', window.location.pathname + window.location.search);
                     }
+                } else if (state && state.page === 'viewer') {
+                    // We've navigated to a 'viewer' state (e.g., using browser forward button)
+                    if (!viewerIsOpen) {
+                        console.log("Popstate: Navigated to 'viewer' state, viewer is closed. Re-opening viewer for content:", state.contentId);
+                        const contentToOpen = findContentById(state.contentId);
+                        if (contentToOpen) {
+                            // Before opening, ensure browse sections are hidden, as openViewer expects this
+                            document.querySelector('.carousel').style.display = 'none';
+                            document.querySelector('.filters-section').style.display = 'none';
+                            document.querySelector('.content-container').style.display = 'none';
+                            openViewer(contentToOpen);
+                        } else {
+                            console.warn("Popstate: Could not find content to reopen viewer:", state.contentId, ". Navigating to browse.");
+                            history.pushState({ page: 'browse' }, 'Browse Content', window.location.pathname + window.location.search); // Use pushState to effectively navigate
+                            closeViewerInternalLogic(); // Ensure UI is consistent with browse state
+                        }
+                    }
+                } else if (!state && viewerIsOpen) {
+                    // Navigated to a state with no specific page info (e.g. initial page or back beyond our states)
+                    // If viewer is open, close it as we are likely no longer on a 'viewer' specific history entry.
+                    console.log("Popstate: Navigated to a null/undefined state while viewer is open. Closing viewer and setting state to browse.");
+                    closeViewerInternalLogic();
+                    history.replaceState({ page: 'browse' }, 'Browse Content', window.location.pathname + window.location.search);
+                } else if (!state && !viewerIsOpen) {
+                    // Navigated to a null state, and viewer is already closed. This is likely the initial page state before our script runs.
+                    // We should ensure it's marked as 'browse'.
+                     console.log("Popstate: Navigated to a null/undefined state, viewer is closed. Ensuring 'browse' state.");
+                    history.replaceState({ page: 'browse' }, 'Browse Content', window.location.pathname + window.location.search);
                 }
-                // No explicit handling for 'viewer' state here anymore, as we don't push it.
             });
             
             // Load more button
@@ -3012,13 +3191,29 @@
                 results.slice(0, 5).forEach(result => {
                     const resultItem = document.createElement('div');
                     resultItem.className = 'search-result-item';
+
+                    // Create the image container and image element structure
+                    // The .search-result-item already uses display:flex, align-items:center
+                    // So .search-img-container will align nicely.
                     resultItem.innerHTML = `
-                        <img src="${result.thumbnail}" alt="${result.title}">
+                        <div class="search-img-container">
+                            <img src="${result.thumbnail}" alt="${result.title}" style="width: 100%; height: 100%; object-fit: cover;">
+                        </div>
                         <div class="search-result-info">
                             <h4>${result.title}</h4>
                             <p>${result.type} • ${result.year || ''}</p>
                         </div>
                     `;
+
+                    const imgElement = resultItem.querySelector('.search-img-container img');
+                    const imgContainer = resultItem.querySelector('.search-img-container');
+
+                    if (imgElement && imgContainer) {
+                        imgElement.onerror = function() {
+                            imgContainer.classList.add('broken-image');
+                        };
+                    }
+
                     resultItem.addEventListener('click', () => {
                         // Find the content and open viewer
                         const found = cachedContent.find(item => item.Title === result.title);
@@ -3051,6 +3246,22 @@
         
         // Initialize the app
         document.addEventListener('DOMContentLoaded', init);
+
+        // Helper function to find content by ID (used in popstate)
+        function findContentById(contentId) {
+            if (!cineData || !cineData.Categories) return null;
+            for (const category of cineData.Categories) {
+                const foundEntry = category.Entries.find(entry => entry.Title === contentId); // Assuming Title is used as ID
+                if (foundEntry) {
+                    return {
+                        ...foundEntry,
+                        type: category.MainCategory.toLowerCase().includes('movie') ? 'movie' :
+                              category.MainCategory.toLowerCase().includes('series') ? 'series' : 'live'
+                    };
+                }
+            }
+            return null;
+        }
 
         // --- Episode Navigation Functionality ---
         function updateNavigationButtonsState() {
