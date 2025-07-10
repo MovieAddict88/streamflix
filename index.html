@@ -566,6 +566,43 @@
             border-radius: var(--radius);
         }
 
+        /* Custom Next/Previous Episode Buttons Styling (now integrated into Plyr's bar) */
+        /* The .plyr__controls__custom class is removed from HTML, so these rules might be adjusted or removed if no longer specific enough */
+
+        /* Styling for the buttons themselves, assuming they are now direct children or correctly classed within Plyr's structure */
+        #prev-episode-btn, #next-episode-btn {
+            /* display: none; /* Initially hidden, JS will show them for series. This will be managed by updateNavigationButtonsState directly on the button elements. */
+            /* Ensure they pick up default Plyr control styling.
+               Most styling should come from .plyr__control, which they already have.
+               We might need minor adjustments if they don't fit perfectly. */
+            padding: 0; /* Plyr controls often have specific padding on the icon or inner elements */
+            width: auto; /* Let them size based on content or Plyr's flex behavior */
+            /* Add some margin if they are too close to other buttons, e.g., settings */
+            margin-right: 5px; /* Example: space before settings button */
+        }
+
+        #prev-episode-btn i, #next-episode-btn i {
+            /* Plyr icons have specific styling, ensure these match */
+            /* font-size: 18px; /* Example, adjust to match other icons */
+            /* margin: 0 5px; /* Adjust spacing around icon and text */
+        }
+
+        /* Ensure disabled state is consistent with Plyr's styling */
+        #prev-episode-btn:disabled, #next-episode-btn:disabled {
+            opacity: 0.5; /* This is a common pattern */
+            cursor: not-allowed;
+            /* Plyr might have its own disabled background/color, ensure consistency or override if necessary */
+        }
+
+        /* The .plyr__controls__custom container and its absolute positioning styles are removed as buttons are injected directly. */
+        /* Any specific hover effects for the buttons that differ from standard .plyr__control:hover can be defined here */
+        /* For example, if we want them to use youtube-red on hover like before: */
+        #prev-episode-btn:not(:disabled):hover, #next-episode-btn:not(:disabled):hover {
+            /* background: var(--youtube-red); /* This might be too aggressive if Plyr handles hover states differently */
+            /* color: #fff; /* Ensure text is white on hover */
+        }
+
+
         /* UPDATED: Server selector inside player - Smaller and less opaque */
         .player-server-selector {
             position: absolute;
@@ -1530,6 +1567,35 @@
             transform: translateY(-2px); /* Subtle hover effect */
             color: white !important;
         }
+
+        /* Fullscreen Title Overlay */
+        #fullscreen-title-overlay {
+            position: absolute;
+            top: 20px; /* Increased top for better spacing */
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            background-color: rgba(0, 0, 0, 0.8); /* Slightly darker background */
+            padding: 10px 25px; /* Increased padding */
+            border-radius: 8px; /* Slightly larger radius */
+            z-index: 15; /* Above controls, below settings menu if it overlaps */
+            font-size: clamp(16px, 2.5vw, 22px); /* Responsive font size */
+            text-align: center;
+            max-width: 85%; /* Allow a bit more width */
+            display: none; /* Managed by JavaScript */
+            opacity: 0; /* Initially hidden for transition */
+            pointer-events: none; /* Prevent interference with video/controls */
+            box-shadow: 0 2px 10px rgba(0,0,0,0.5); /* Subtle shadow for depth */
+            white-space: nowrap; /* Prevent title from wrapping if possible */
+            overflow: hidden;
+            text-overflow: ellipsis; /* Add ellipsis if title is too long */
+            transition: opacity 0.3s ease-in-out; /* Smooth transition for opacity */
+        }
+
+        #fullscreen-title-overlay.visible {
+            display: block; /* Use a class to control display for transitions */
+            opacity: 1;
+        }
         
     </style>
 </head>
@@ -1674,6 +1740,17 @@
                             <!-- Quality options will be dynamically added -->
                         </select>
                         <i class="fas fa-cog"></i>
+                    </div>
+                    <!-- Fullscreen Title Overlay -->
+                    <div id="fullscreen-title-overlay"></div>
+                    <!-- Next/Previous Episode Buttons -->
+                    <div class="plyr__controls__custom">
+                        <button type="button" class="plyr__controls__item plyr__control" id="prev-episode-btn" aria-label="Previous Episode">
+                            <i class="fas fa-backward"></i> 
+                        </button>
+                        <button type="button" class="plyr__controls__item plyr__control" id="next-episode-btn" aria-label="Next Episode">
+                             <i class="fas fa-forward"></i>
+                        </button>
                     </div>
                 </div>
                 
@@ -1840,7 +1917,12 @@
             dislikeCountSpan: document.getElementById('dislike-count-span'),
             // Containers for moving elements
             relatedVideosContainer: document.querySelector('.related-videos'),
-            videoDetailsContainer: document.querySelector('.video-details')
+            videoDetailsContainer: document.querySelector('.video-details'),
+            // Episode navigation buttons
+            prevEpisodeBtn: document.getElementById('prev-episode-btn'),
+            nextEpisodeBtn: document.getElementById('next-episode-btn'),
+            customControlsContainer: document.querySelector('.plyr__controls__custom'),
+            fullscreenTitleOverlay: document.getElementById('fullscreen-title-overlay')
         };
         
         // State
@@ -2303,9 +2385,17 @@
         
         // Open viewer for content
         function openViewer(content) {
-            // Stop any currently playing content
+            // Stop any currently playing content and clear player source
             if (playerInstance) {
-                playerInstance.stop();
+                playerInstance.stop(); // Stop playback
+                // Attempt to clear the source to prevent old frame lingering
+                playerInstance.source = {
+                    type: 'video',
+                    sources: [],
+                    poster: '' // Optionally clear poster too
+                };
+                // A more forceful way if the above isn't enough might be to destroy and reinitialize
+                // but that's a heavier operation. Let's try clearing source first.
             }
 
             // Store current content details for save/like/share
@@ -2388,12 +2478,16 @@
                 
                 // Automatically open the first season and play its first episode
                 if (content.Seasons.length > 0) {
-                    openSeason(content.Seasons[0]);
+                    openSeason(content.Seasons[0]); // This will also call updateNavigationButtonsState via playEpisode
+                } else {
+                    updateNavigationButtonsState(); // No seasons/episodes, so buttons should be hidden/disabled
                 }
-            } else if (content.type === 'movie') {
+            } else { // Movie or Live TV
+                 elements.customControlsContainer.style.display = 'none'; // Hide for non-series
                 // Play the first server by default for movies
-                if (content.Servers && content.Servers.length > 0) {
-                    playUrl(content.Servers[0].url);
+                if (content.type === 'movie' && content.Servers && content.Servers.length > 0) {
+                    const firstServer = content.Servers[0];
+                    playUrl(firstServer.url, firstServer.subtitle);
                 }
             }
             
@@ -2428,12 +2522,36 @@
             // Initialize player if not already done
             if (!playerInstance) {
                 playerInstance = new Plyr('#player', {
-                    controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'captions', 'settings', 'pip', 'fullscreen'],
+                    // controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'captions', 'settings', 'pip', 'fullscreen'], // Default controls
+                    // We'll keep default controls and add ours via DOM manipulation
                     youtube: {
                         noCookie: true,
                         rel: 0,
                         showinfo: 0,
                         iv_load_policy: 3
+                    }
+                });
+
+                playerInstance.on('ready', () => {
+                    const controlsContainer = playerInstance.elements.controls;
+                    if (controlsContainer) {
+                        const settingsButton = controlsContainer.querySelector('button[data-plyr="settings"]');
+                        // Ensure buttons are created and available in 'elements'
+                        if (elements.prevEpisodeBtn && elements.nextEpisodeBtn) {
+                            if (settingsButton) {
+                                // Insert before the settings button
+                                settingsButton.parentNode.insertBefore(elements.prevEpisodeBtn, settingsButton);
+                                settingsButton.parentNode.insertBefore(elements.nextEpisodeBtn, settingsButton);
+                            } else {
+                                // Fallback: append to the main controls container if settings button not found
+                                controlsContainer.appendChild(elements.prevEpisodeBtn);
+                                controlsContainer.appendChild(elements.nextEpisodeBtn);
+                            }
+                            // The .plyr__controls__custom container is no longer needed for button positioning
+                            if (elements.customControlsContainer) {
+                                elements.customControlsContainer.remove(); // Or just hide it if preferred
+                            }
+                        }
                     }
                 });
                 
@@ -2444,11 +2562,66 @@
                             console.log('Orientation lock failed: ', error);
                         });
                     }
+                    // Show title overlay
+                    if (elements.fullscreenTitleOverlay) {
+                        let titleText = '';
+                        // Prioritize series episode title if available
+                        if (currentSeries && currentSeries.type === 'series' && currentEpisode && currentEpisode.Title) {
+                            titleText = `${currentSeries.Title} - Episode ${currentEpisode.Episode}: ${currentEpisode.Title}`;
+                        }
+                        // Then check if it's a series title (e.g., if somehow an episode isn't active yet but it is a series)
+                        else if (currentSeries && currentSeries.type === 'series' && currentSeries.Title) {
+                            titleText = currentSeries.Title; // Show series title if no specific episode
+                        }
+                        // Fallback to the general content title from currentContentInfo (should cover movies, live TV, or series title if above failed)
+                        else if (currentContentInfo && currentContentInfo.title) {
+                            titleText = currentContentInfo.title;
+                        }
+
+                        elements.fullscreenTitleOverlay.textContent = titleText;
+
+                        if (titleText) {
+                            // Initially show title as controls are usually visible on fullscreen entry
+                            elements.fullscreenTitleOverlay.classList.add('visible');
+                        } else {
+                            elements.fullscreenTitleOverlay.classList.remove('visible');
+                        }
+                    }
+                    updateNavigationButtonsState(); // Ensure nav buttons are correctly displayed
                 });
 
                 playerInstance.on('exitfullscreen', () => {
                     if (screen.orientation && screen.orientation.unlock) {
                         screen.orientation.unlock();
+                    }
+                    // Hide title overlay
+                    if (elements.fullscreenTitleOverlay) {
+                        elements.fullscreenTitleOverlay.classList.remove('visible');
+                    }
+                    updateNavigationButtonsState(); // Ensure nav buttons are correctly displayed
+                });
+
+                playerInstance.on('controlsshown', () => {
+                    if (playerInstance.fullscreen.active && elements.fullscreenTitleOverlay) {
+                        // Re-evaluate title text in case episode changed while controls were hidden
+                        let titleText = '';
+                        if (currentSeries && currentSeries.type === 'series' && currentEpisode && currentEpisode.Title) {
+                            titleText = `${currentSeries.Title} - Episode ${currentEpisode.Episode}: ${currentEpisode.Title}`;
+                        } else if (currentSeries && currentSeries.type === 'series' && currentSeries.Title) {
+                            titleText = currentSeries.Title;
+                        } else if (currentContentInfo && currentContentInfo.title) {
+                            titleText = currentContentInfo.title;
+                        }
+                        elements.fullscreenTitleOverlay.textContent = titleText;
+                        if (titleText) {
+                            elements.fullscreenTitleOverlay.classList.add('visible');
+                        }
+                    }
+                });
+
+                playerInstance.on('controlshidden', () => {
+                    if (playerInstance.fullscreen.active && elements.fullscreenTitleOverlay) {
+                        elements.fullscreenTitleOverlay.classList.remove('visible');
                     }
                 });
             }
@@ -2469,9 +2642,61 @@
             elements.dislikeBtn.addEventListener('click', handleDislike);
         }
         
+        // Helper function to get BCP 47 language code
+        function getLanguageCode(languageName) {
+            if (!languageName) return 'en'; // Default to English if no name provided
+            const name = languageName.toLowerCase();
+            const mapping = {
+                'english': 'en',
+                'filipino': 'fil',
+                'tagalog': 'tl',
+                'spanish': 'es',
+                'japanese': 'ja',
+                'korean': 'ko',
+                'chinese': 'zh',
+                'french': 'fr',
+                'german': 'de',
+                'hindi': 'hi',
+                'arabic': 'ar',
+                // Add more mappings as needed
+            };
+            if (mapping[name]) {
+                return mapping[name];
+            }
+            // Fallback: try to use the first two letters if it's a common short code
+            if (name.length >= 2) {
+                // Very basic check, could be improved with a list of valid 2-letter codes
+                const commonShortCodes = ['en', 'es', 'fr', 'de', 'ja', 'ko', 'it', 'pt', 'ru'];
+                const shortCode = name.substring(0, 2);
+                if (commonShortCodes.includes(shortCode)) return shortCode;
+            }
+            return languageName; // Fallback to the original name if no mapping found
+        }
+
         // Play URL with YouTube support
-        function playUrl(url) {
+        function playUrl(url, subtitles) { // Added subtitles parameter
             if (!url || !playerInstance) return;
+
+            let plyrTracks = [];
+            if (subtitles && Array.isArray(subtitles) && subtitles.length > 0) {
+                plyrTracks = subtitles
+                    .filter(sub => sub && sub.url && sub.title && sub.format) // Ensure basic properties exist
+                    .sort((a, b) => { // Prioritize VTT
+                        if (a.format.toLowerCase() === 'vtt' && b.format.toLowerCase() !== 'vtt') return -1;
+                        if (a.format.toLowerCase() !== 'vtt' && b.format.toLowerCase() === 'vtt') return 1;
+                        return 0;
+                    })
+                    .map((sub, index) => {
+                        const srclang = getLanguageCode(sub.title);
+                        return {
+                            kind: 'captions',
+                            label: sub.title,
+                            srclang: srclang,
+                            src: sub.url,
+                            default: index === 0 && sub.format.toLowerCase() === 'vtt' // Default first VTT track
+                        };
+                    });
+            }
             
             // Check if it's a YouTube URL
             if (isYouTubeUrl(url)) {
@@ -2482,7 +2707,8 @@
                         sources: [{
                             src: videoId,
                             provider: 'youtube'
-                        }]
+                        }],
+                        tracks: plyrTracks // Add tracks for YouTube if any
                     };
                     return;
                 }
@@ -2494,7 +2720,8 @@
                 sources: [{
                     src: url,
                     type: url.includes('m3u8') ? 'application/x-mpegURL' : 'video/mp4'
-                }]
+                }],
+                tracks: plyrTracks // Add tracks for regular video if any
             };
         }
         
@@ -2525,7 +2752,21 @@
             
             // Add change event
             elements.serverSelect.onchange = function() {
-                playUrl(this.value);
+                const selectedUrl = this.value;
+                // Find the server object that matches the selected URL to get subtitles
+                const currentItem = currentSeries || currentContentInfo; // Use series if available, else general content info
+                let currentServers = [];
+
+                if (currentItem) {
+                    if (currentEpisode && currentEpisode.Servers) { // If an episode is active
+                        currentServers = currentEpisode.Servers;
+                    } else if (currentItem.Servers) { // If it's a movie or series without specific episode context yet
+                        currentServers = currentItem.Servers;
+                    }
+                }
+
+                const selectedServer = currentServers.find(server => server.url === selectedUrl);
+                playUrl(selectedUrl, selectedServer ? selectedServer.subtitle : undefined);
             };
         }
         
@@ -2570,8 +2811,36 @@
             
             // Play the first server
             if (episode.Servers && episode.Servers.length > 0) {
-                playUrl(episode.Servers[0].url);
+                const firstServer = episode.Servers[0];
+                playUrl(firstServer.url, firstServer.subtitle);
             }
+
+            // Explicitly update the episode selector's displayed value
+            if (elements.episodeSelector.value !== episode.Episode.toString()) {
+                elements.episodeSelector.value = episode.Episode;
+            }
+
+            // Update fullscreen title overlay content if a series/episode is playing.
+            // Visibility is handled by controlsshown/hidden events.
+            if (elements.fullscreenTitleOverlay) {
+                let titleText = '';
+                if (currentSeries && currentSeries.type === 'series' && currentEpisode && currentEpisode.Title) {
+                    titleText = `${currentSeries.Title} - Episode ${currentEpisode.Episode}: ${currentEpisode.Title}`;
+                } else if (currentContentInfo && currentContentInfo.title) {
+                    // This case might be less relevant here as playEpisode is series-specific,
+                    // but good for safety if currentEpisode details are temporarily missing.
+                    titleText = currentContentInfo.title;
+                }
+                elements.fullscreenTitleOverlay.textContent = titleText;
+
+                // If the title becomes empty for some reason, ensure it's not 'visible'
+                // although controlsshown would normally re-evaluate and hide it if empty.
+                if (!titleText && elements.fullscreenTitleOverlay.classList.contains('visible')) {
+                    elements.fullscreenTitleOverlay.classList.remove('visible');
+                }
+            }
+
+            updateNavigationButtonsState(); // Update buttons after episode changes
         }
         
         // Close viewer (UI and state update part)
@@ -2607,6 +2876,7 @@
             currentSeason = null;
             currentSeries = null;
             currentContentInfo = {}; // Reset content info
+            elements.customControlsContainer.style.display = 'none'; // Hide nav buttons
             
             window.scrollTo(0, 0); // Scroll to top when returning to browse
         }
@@ -2770,6 +3040,10 @@
             // Load more button
             elements.loadMoreBtn.addEventListener('click', loadMoreContent);
             
+            // Episode navigation buttons
+            elements.prevEpisodeBtn.addEventListener('click', handlePrevEpisode);
+            elements.nextEpisodeBtn.addEventListener('click', handleNextEpisode);
+
             // Infinite scroll
             window.addEventListener('scroll', () => {
                 if (isFetching) return;
@@ -2884,6 +3158,103 @@
         
         // Initialize the app
         document.addEventListener('DOMContentLoaded', init);
+
+        // --- Episode Navigation Functionality ---
+        function updateNavigationButtonsState() {
+            const isSeriesContext = currentSeries && currentSeries.type === 'series' && currentSeason && currentEpisode;
+
+            if (!elements.prevEpisodeBtn || !elements.nextEpisodeBtn) return; // Buttons might not be initialized yet
+
+            if (!isSeriesContext) {
+                elements.prevEpisodeBtn.style.display = 'none';
+                elements.nextEpisodeBtn.style.display = 'none';
+                return;
+            }
+
+            // Default to visible, let Plyr handle display type (e.g. inline-flex)
+            elements.prevEpisodeBtn.style.display = '';
+            elements.nextEpisodeBtn.style.display = '';
+
+            const currentEpisodeIndex = currentSeason.Episodes.findIndex(ep => ep.Episode === currentEpisode.Episode);
+            const currentSeasonIndex = currentSeries.Seasons.findIndex(s => s.Season === currentSeason.Season);
+
+            // Previous button state
+            if (currentEpisodeIndex > 0) { // Has previous episode in current season
+                elements.prevEpisodeBtn.disabled = false;
+            } else { // First episode of current season
+                if (currentSeasonIndex > 0) { // Has previous season
+                    elements.prevEpisodeBtn.disabled = false;
+                } else { // First episode of first season
+                    elements.prevEpisodeBtn.disabled = true;
+                }
+            }
+
+            // Next button state
+            if (currentEpisodeIndex < currentSeason.Episodes.length - 1) { // Has next episode in current season
+                elements.nextEpisodeBtn.disabled = false;
+            } else { // Last episode of current season
+                if (currentSeasonIndex < currentSeries.Seasons.length - 1) { // Has next season
+                    elements.nextEpisodeBtn.disabled = false;
+                } else { // Last episode of last season
+                    elements.nextEpisodeBtn.disabled = true;
+                }
+            }
+        }
+
+        function handlePrevEpisode() {
+            if (!currentSeries || !currentSeason || !currentEpisode) return;
+
+            const currentEpisodeIndex = currentSeason.Episodes.findIndex(ep => ep.Episode === currentEpisode.Episode);
+            const currentSeasonIndex = currentSeries.Seasons.findIndex(s => s.Season === currentSeason.Season);
+
+            if (currentEpisodeIndex > 0) {
+                // Play previous episode in the same season
+                playEpisode(currentSeason.Episodes[currentEpisodeIndex - 1]);
+            } else {
+                // First episode of current season, try to go to previous season
+                if (currentSeasonIndex > 0) {
+                    const prevSeasonData = currentSeries.Seasons[currentSeasonIndex - 1];
+                    if (prevSeasonData.Episodes && prevSeasonData.Episodes.length > 0) {
+                        currentSeason = prevSeasonData; // IMPORTANT: Update currentSeason context
+
+                        // Update the episode selector for the new (previous) season
+                        elements.episodeSelector.innerHTML = '<option value="">Select Episode</option>';
+                        currentSeason.Episodes.forEach(ep => {
+                            const option = document.createElement('option');
+                            option.value = ep.Episode;
+                            option.textContent = `Episode ${ep.Episode}: ${ep.Title}`;
+                            elements.episodeSelector.appendChild(option);
+                        });
+
+                        // Play the last episode of this (newly set current) previous season
+                        const targetEpisode = currentSeason.Episodes[currentSeason.Episodes.length - 1];
+                        playEpisode(targetEpisode); // playEpisode will now update the selector's value
+                        // elements.episodeSelector.value = targetEpisode.Episode; // Redundant due to update in playEpisode
+                    }
+                }
+            }
+            // updateNavigationButtonsState(); // playEpisode calls this
+        }
+
+        function handleNextEpisode() {
+            if (!currentSeries || !currentSeason || !currentEpisode) return;
+
+            const currentEpisodeIndex = currentSeason.Episodes.findIndex(ep => ep.Episode === currentEpisode.Episode);
+            const currentSeasonIndex = currentSeries.Seasons.findIndex(s => s.Season === currentSeason.Season);
+
+            if (currentEpisodeIndex < currentSeason.Episodes.length - 1) {
+                // Play next episode in the same season
+                playEpisode(currentSeason.Episodes[currentEpisodeIndex + 1]);
+            } else {
+                // Last episode of current season, try to go to next season
+                if (currentSeasonIndex < currentSeries.Seasons.length - 1) {
+                    const nextSeason = currentSeries.Seasons[currentSeasonIndex + 1];
+                    openSeason(nextSeason); // This will auto-play the first episode of nextSeason
+                }
+            }
+            updateNavigationButtonsState();
+        }
+        // --- End Episode Navigation Functionality ---
 
         // --- Share Functionality ---
         function displayTemporaryMessage(element, message) {
