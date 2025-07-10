@@ -552,8 +552,7 @@
   text-overflow: ellipsis;
   word-break: break-word;
   font-size: 16px;
-  /* height: 2.8em; /* Removed fixed height, relying on line-clamp and flex properties */
-  /* max-height: 2.8em; /* Consider if line-clamp is not enough */
+  height: 2.8em; /* REINSTATED: Ensures space for 2 lines. (1.4em line-height * 2) */
 }
 
 
@@ -1973,7 +1972,7 @@
         let currentEpisode = null;
         let currentSeason = null;
         let currentSeries = null;
-        let wasSearchVisibleBeforeFullscreen = false; // For mobile fullscreen search bar state
+        // let wasSearchVisibleBeforeFullscreen = false; // REMOVED - No longer needed for always-hide strategy
         
         // Function to shuffle an array
         function shuffleArray(array) {
@@ -2655,32 +2654,23 @@
                             console.log('Orientation lock failed: ', error);
                         });
                     }
-                    // For mobile, manage search bar visibility
-                    if (window.innerWidth <= 768) { // Check if on mobile (use consistent breakpoint)
-                        wasSearchVisibleBeforeFullscreen = elements.searchContainer.classList.contains('show');
-                        // The CSS `html.plyr--fullscreen-active header { display: none !important; }`
-                        // handles hiding. No need to remove 'show' here as it might interfere
-                        // if user quickly exits fullscreen before CSS applies fully, though unlikely.
-                        // The primary goal is to restore correctly on exit.
-                        console.log("Enter fullscreen mobile: search was visible?", wasSearchVisibleBeforeFullscreen);
-                    }
+                    // For mobile, the search bar visibility is now always hidden on exitfullscreen.
+                    // No need to store its state here anymore.
+                    // if (window.innerWidth <= 768) {
+                    //     wasSearchVisibleBeforeFullscreen = elements.searchContainer.classList.contains('show');
+                    //     console.log("Enter fullscreen mobile: search was visible?", wasSearchVisibleBeforeFullscreen);
+                    // }
                 });
 
                 playerInstance.on('exitfullscreen', () => {
                     if (screen.orientation && screen.orientation.unlock) {
                         screen.orientation.unlock();
                     }
-                    // For mobile, restore search bar visibility
-                    if (window.innerWidth <= 768) { // Re-check if still on mobile
-                        console.log("Exit fullscreen mobile (immediate): should search be visible?", wasSearchVisibleBeforeFullscreen);
-                        if (wasSearchVisibleBeforeFullscreen) {
-                            elements.searchContainer.classList.add('show');
-                            // elements.searchInput.focus(); // Optional: Re-focusing might be jarring. Avoid for now.
-                        } else {
-                            elements.searchContainer.classList.remove('show');
-                        }
-                        // Reset the flag immediately after use
-                        wasSearchVisibleBeforeFullscreen = false;
+                    // For mobile, ALWAYS hide search bar on exiting fullscreen.
+                    // User must click search icon again to show it.
+                    if (window.innerWidth <= 768) {
+                        console.log("Exit fullscreen mobile: Forcing search container to hide.");
+                        elements.searchContainer.classList.remove('show');
                     }
                 });
             }
