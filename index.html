@@ -2514,7 +2514,7 @@ let isMobileSearchForcedHidden = false; // Flag for mobile search visibility aft
                 card.className = 'related-card';
                 card.innerHTML = `
                     <div class="related-thumbnail">
-                        <img src="${relatedImgSrc}" alt="${item.Title}">
+                        <img src="${relatedImgSrc}" alt="${item.Title}" onerror="this.onerror=null; this.src='${DEFAULT_PLACEHOLDER_IMAGE}';">
                     </div>
                     <div class="related-info">
                         <h4>${item.Title}</h4>
