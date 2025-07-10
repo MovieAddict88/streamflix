@@ -543,7 +543,7 @@
 
 .card-title {
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.4; /* Unitless line-height is better, multiplied by font-size */
   color: var(--light);
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -551,8 +551,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   word-break: break-word;
-  font-size: 16px;
-  height: 2.8em; /* REINSTATED: Ensures space for 2 lines. (1.4em line-height * 2) */
+  font-size: 16px; /* This is 1em for the height calculation */
+  height: 2.8em; /* Correctly reinstated (2 lines * 1.4 line-height) */
 }
 
 
